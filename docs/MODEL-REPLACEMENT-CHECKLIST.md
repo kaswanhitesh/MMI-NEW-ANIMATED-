@@ -1,0 +1,73 @@
+# Checklist: replacing the placeholders with the final 3D models
+
+The animation timeline, camera and page layout never need to change for a model swap. Only the
+files in `public/models/` and the entries in `src/three/assets/modelManifest.ts` are involved.
+
+## 1. Receive and inspect the files
+
+- [ ] You have **binary glTF** files (`.glb`), one per vehicle, textures embedded.
+- [ ] Open each in a viewer (e.g. the three.js editor or any glTF viewer) and note:
+      the up axis, which way the nose points, the unit (m / cm / mm), and roughly where the
+      pivot (origin) sits.
+- [ ] Check the triangle count and file size against the budget in `public/models/README.md`.
+      Ask for Draco/meshopt-compressed versions if they are heavy, and wire the decoder in
+      `configureModelLoader()` (`src/three/assets/ValidatedGLTFLoader.ts`).
+
+## 2. Drop the files in place
+
+- [ ] Copy to `public/models/puller-truck.glb` and `public/models/hydraulic-axle-trailer.glb`
+      (exact names; the paths come from `MODEL_MANIFEST[...].path`).
+- [ ] Start `npm run dev`. The on-screen "temporary placeholder" badge must disappear for each
+      model that loads; the browser console must not show an `[assets]` warning for it.
+      If the badge stays, hover it: the reason text tells you whether the file was not found,
+      was not a GLB (an HTML page was served instead), or failed to parse.
+
+## 3. Normalise scale, orientation and pivot
+
+Edit the model's `normalisation` block in `src/three/assets/modelManifest.ts`:
+
+- [ ] **Scale** — the vehicle should be life-size in metres (a puller is roughly 3.5–4 m tall).
+      If it is 100× too big it was authored in centimetres: `scale: 0.01`.
+- [ ] **Rotation** — the nose must point to −X (screen left) and the vehicle must stand upright.
+      See the recipes in `docs/COORDINATE-SYSTEM.md`.
+- [ ] **Grounding and centring** — leave `alignBottomToGround: true` and `centreFootprint: true`
+      unless the model has detached parts (e.g. a separate shadow plane) that distort its bounds;
+      in that case fix with `offset`.
+- [ ] Re-check: tyres touch the floor (no floating, no sinking) and the vehicle is centred over
+      its own position.
+
+## 4. Set the coupling anchors
+
+- [ ] Measure, **after** normalisation, the local coordinates of the puller's fifth-wheel / coupling
+      plate and the trailer's gooseneck connection point (x along the vehicle, y height, z lateral,
+      metres from the footprint centre at ground level).
+- [ ] Enter them as `anchors.coupling` for each model. The final assembly positions are derived from
+      these, so the vehicles will meet exactly at `assembly.couplingPoint`.
+- [ ] If the two anchor heights differ by more than `assembly.anchorHeightTolerance`, the dev
+      console warns — usually a sign the scale or grounding is wrong.
+- [ ] Update `footprint` to the real envelope so development diagnostics stay meaningful.
+
+## 5. Tune the composition (optional, config only)
+
+In `src/scenes/scene-01-coupling/config.ts`:
+
+- [ ] `assembly.couplingPoint.x` shifts the whole combination left/right.
+- [ ] `assembly.pullerApproachDistance` controls how far the puller reverses during Phase D.
+- [ ] `positions.pullerStart` / `positions.trailerStart` set where the vehicles appear from;
+      keep them outside the visible width for the base framing.
+- [ ] `camera.base.fitWidth` / `camera.heroHold.fitWidth` tighten or loosen the framing.
+- [ ] `scroll.distanceVh` and `scroll.scrub` set how long and how smooth the scrub feels.
+- [ ] `lighting.*` and `environment.*` for the look. `lighting.key.shadowExtent` must cover the
+      full combination.
+
+## 6. Verify
+
+- [ ] `npm run build` passes (`tsc -b` + Vite).
+- [ ] Scroll forward and backward through the whole section on desktop and on a phone-sized
+      viewport: entrance from the left, entrance from the right, approach, hold.
+- [ ] Enable "reduce motion" in the OS and reload: the finished combination is shown statically
+      with the copy visible.
+- [ ] Temporarily rename one `.glb` to confirm the placeholder fallback still works — the site must
+      stay usable without any model.
+- [ ] Remove `placeholders.showBadge` only if you want to hide the badge in production; it never
+      shows when both models load.
