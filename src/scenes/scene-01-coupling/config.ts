@@ -510,7 +510,9 @@ export const SCENE_01_CONFIG: Scene01Config = {
         fitHeight: 32,
         maxDistance: 52,
         screenOffset: [-0.4, -0.3],
-        portrait: { ...LOADING_FRAMING.portrait, fitHeight: 60, maxDistance: 60, screenOffset: [0, -0.3] },
+        // Portrait: a lower camera (6° elevation) instead of a further one, so it stays under the trusses and inside the
+        // door wall while the whole crane bridge fits above the combination.
+        portrait: { ...LOADING_FRAMING.portrait, direction: [-0.3746, 0.1051, 0.9272], maxDistance: 38, screenOffset: [0, -0.3], fov: 55 },
       },
     },
     sequence: ['base', 'heroHold', 'wide', 'highway', 'city', 'entry', 'doorway', 'loading', 'lift'],
