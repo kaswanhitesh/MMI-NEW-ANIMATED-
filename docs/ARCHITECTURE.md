@@ -38,7 +38,8 @@ src/three/                  Scene-agnostic 3D engine layer — nothing here know
                             error boundary, DOM fallback) and RenderingConfig
   camera/                   useFramedCamera: responsive framing from a FramedCameraSpec
   environment/              ProceduralEnvironment (RoomEnvironment PMREM), StageLighting, YardFloor,
-                            EnvironmentSlot (replaceable environment groups) and the procedural
+                            EnvironmentSlot (replaceable environment groups: GLB or stand-in, with
+                            instancing and merge-by-material for static scenery) and the procedural
                             stand-ins: FleetGarage + BrandSign, AccessRoad, Highway, CityBackdrop;
                             DaylightSky; slotSpace (world ↔ slot-local maths); roadSurface (layers)
   industrial/               Contracts (types.ts) and procedural stand-ins for heavy industry: IndustrialZone,

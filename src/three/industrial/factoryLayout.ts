@@ -21,8 +21,12 @@ import type { GeminiFactoryConfig } from './types'
 
 /** Thickness of the clad walls (m). */
 export const FACTORY_WALL_THICKNESS = 0.25
-/** Top of the concrete floor slab inside the hall (local y). */
-export const FACTORY_SLAB_TOP = 0.04
+/**
+ * Top of the concrete floor slab inside the hall (local y). Below the scene's contact-shadow plane (20 mm, see
+ * environment/roadSurface.ts LIFT) so the vehicles' contact shadows still show on the hall floor; the painted
+ * markings sit 6 mm above it.
+ */
+export const FACTORY_SLAB_TOP = 0.008
 /** Clear gap between a column's inner face and the side of its crane runway girder (bridged by the corbel). */
 export const RUNWAY_COLUMN_GAP = 0.05
 /** Section height of the crane rail on each runway girder: girder top = railHeight − CRANE_RAIL_HEIGHT. */

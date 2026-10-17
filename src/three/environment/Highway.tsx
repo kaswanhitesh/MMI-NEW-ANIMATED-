@@ -21,7 +21,7 @@ export interface HighwayProps {
   config: HighwayConfig
   /** Y of the ground plane, slot-local. */
   groundY: number
-  /** Slot-local X ranges where the far edge line is omitted (junction mouths of roads joining the far side). */
+  /** Slot-local X ranges of junction mouths of roads joining the far side: the far edge line breaks there and no street light stands in (or within 4 m of) them. */
   farEdgeGaps?: ReadonlyArray<readonly [number, number]>
 }
 
@@ -54,7 +54,10 @@ interface LightBox {
 }
 
 /** Street-light boxes (poles, arms, lamp heads) along the far verge, skipping the excluded stretches. */
-function buildStreetLights(config: HighwayConfig, groundY: number): { poles: LightBox[]; lamps: LightBox[] } {
+/** Clear distance (m) kept between a street light and a junction mouth on the far side. */
+const JUNCTION_CLEARANCE = 4
+
+function buildStreetLights(config: HighwayConfig, groundY: number, junctions: ReadonlyArray<readonly [number, number]>): { poles: LightBox[]; lamps: LightBox[] } {
   const sl = config.streetLights
   const poles: LightBox[] = []
   const lamps: LightBox[] = []
@@ -62,7 +65,9 @@ function buildStreetLights(config: HighwayConfig, groundY: number): { poles: Lig
   const carriageway = config.lanes * config.laneWidth
   // Centre of the far verge; the arm reaches back over the shoulder towards the road.
   const z = -(carriageway / 2 + config.shoulderWidth + config.vergeWidth / 2)
-  const excluded = (x: number) => sl.exclude.some(([a, b]) => x >= Math.min(a, b) && x <= Math.max(a, b))
+  const within = (x: number, [a, b]: readonly [number, number], margin: number) => x >= Math.min(a, b) - margin && x <= Math.max(a, b) + margin
+  // No pole in an excluded stretch, nor in (or right beside) a road joining from the far side.
+  const excluded = (x: number) => sl.exclude.some((r) => within(x, r, 0)) || junctions.some((r) => within(x, r, JUNCTION_CLEARANCE))
   const half = config.length / 2
   for (let x = Math.ceil(-half / sl.spacing) * sl.spacing; x <= half; x += sl.spacing) {
     if (excluded(x)) continue
@@ -115,7 +120,7 @@ export function Highway({ config, groundY, farEdgeGaps }: HighwayProps) {
     [config.colors, config.streetLights.color, grain],
   )
   const boxGeometry = useMemo(() => new BoxGeometry(1, 1, 1), [])
-  const lights = useMemo(() => buildStreetLights(config, groundY), [config, groundY])
+  const lights = useMemo(() => buildStreetLights(config, groundY, farEdgeGaps ?? []), [config, groundY, farEdgeGaps])
 
   useEffect(() => () => {
     for (const material of Object.values(materials)) material.dispose()

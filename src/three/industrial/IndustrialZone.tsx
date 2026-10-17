@@ -18,10 +18,13 @@
  *    heavy-vehicle gate opening (8–14 m) between two capped concrete piers; the
  *    palisade sliding leaf is parked open behind the wall on its ground track,
  *    with two safety-yellow bollards and a yellow stop line just inside;
- *  - a paved access road `accessRoadWidth` wide from the gate to the verge line
- *    (z = 0, plus a 5 cm tuck over the highway verge's edge so the joint never
- *    cracks) at LIFT.exitRoad, continuing 4.5 m into the compound as wide as the
- *    gate; the whole walled area is a paved yard at LIFT.apron;
+ *  - a paved access road `accessRoadWidth` wide from the gate across the verge
+ *    line (z = 0) and on by `roadReach` to the carriageway (plus a 5 cm tuck so
+ *    the joint never cracks) at LIFT.exitRoad, continuing 4.5 m into the
+ *    compound as wide as the gate; the whole walled area is a paved yard at
+ *    LIFT.apron. `industrialZoneRoadMouths()` returns where these roads meet
+ *    the road, so the highway can break its edge line and keep street lights
+ *    out of them;
  *  - behind an open truck yard (14–22 m deep): a portal-frame shed (clad box,
  *    low-pitched gable roof of two sloped boxes over a gable prism, ridge along
  *    its longer side, gutters, ridge cap, frame lines, high-level glazing band,
@@ -129,7 +132,7 @@ const GATE = {
   paleSpacing: 0.18,
   innerRoad: 4.5,
 } as const
-/** How far the access road tucks over the highway verge's edge (m). */
+/** How far the access road tucks past the carriageway edge (m). */
 const ROAD_TUCK = 0.05
 /** Open truck yard between the front wall and the buildings (m). */
 const FRONT_YARD: Range = [14, 22]
@@ -210,8 +213,18 @@ function layoutCompounds(cfg: IndustrialZoneConfig): Array<readonly [number, num
   return out
 }
 
-/** Lays out every instance of the zone from the config. Pure and deterministic; local frame. */
-function buildIndustrialZone(cfg: IndustrialZoneConfig): Record<PartKey, Instance[]> {
+/**
+ * Local X ranges where the compounds' access roads meet the road (one per gate), e.g. to break the highway's edge line
+ * and keep street lights out of the junctions. Pure and deterministic (the same layout the component draws).
+ */
+export function industrialZoneRoadMouths(cfg: IndustrialZoneConfig): Array<[number, number]> {
+  const mouths: Array<[number, number]> = []
+  buildIndustrialZone(cfg, mouths)
+  return mouths
+}
+
+/** Lays out every instance of the zone from the config (and, if given, collects the access-road mouths). Pure and deterministic; local frame. */
+function buildIndustrialZone(cfg: IndustrialZoneConfig, mouths?: Array<[number, number]>): Record<PartKey, Instance[]> {
   const parts = Object.fromEntries(PART_KEYS.map((k) => [k, [] as Instance[]])) as Record<PartKey, Instance[]>
   let rand = createRandom(cfg.seed)
 
@@ -521,7 +534,9 @@ function buildIndustrialZone(cfg: IndustrialZoneConfig): Record<PartKey, Instanc
     // --- Access road from the gate to the verge line, and on into the yard as wide as the gate. ---
     const aw = cfg.accessRoadWidth
     if (aw > 0) {
-      flat('roads', gc - aw / 2, gc + aw / 2, zF, ROAD_TUCK, LIFT.exitRoad)
+      // On past the zone's road edge (local z = 0) by `roadReach`, onto the verge and shoulder up to the carriageway.
+      flat('roads', gc - aw / 2, gc + aw / 2, zF, Math.max(0, cfg.roadReach) + ROAD_TUCK, LIFT.exitRoad)
+      mouths?.push([gc - aw / 2, gc + aw / 2])
       flat('roads', gx0, gx1, zInner - GATE.innerRoad, zF + 0.1, LIFT.exitRoad)
     }
 

@@ -13,7 +13,7 @@
  * columns standing half proud of it as pilasters; the side and back walls on the
  * outer columns' outer faces; crane rails `runwayInset()` inside their column
  * lines with the rail TOP at `craneRunway.railHeight`; slab top at
- * FACTORY_SLAB_TOP (0.04). Fixtures are placed at `position` and turned by `yaw`
+ * FACTORY_SLAB_TOP (8 mm). Fixtures are placed at `position` and turned by `yaw`
  * about +Y; in a fixture's own frame the vessel / roll / rack axis is local X,
  * and the welding manipulator's boom reaches along local +Z (world direction
  * (sin yaw, 0, cos yaw)) from its column at the origin.
@@ -38,7 +38,7 @@
  *    each opening just in front of the wall, and guard bollards. The openings are
  *    completely clear from the floor to `door.height`.
  *  - factory:floor: the concrete slab and painted markings (walkway lines along
- *    both sides of each bay and the bay A loading zone outline), 6 mm proud.
+ *    both sides of each bay and the optional `floor.loadingZone` outline), 6 mm proud.
  *  - factory:fixtures: turning rolls, column and boom welding manipulator, plate
  *    stacks on dunnage, dished-head racks and three-roll plate bending machines.
  *    No vessels (separate assets).
@@ -224,8 +224,6 @@ const CORBEL_H = 0.7
 // Floor markings: painted 6 mm proud of the slab (and sunk 4 mm into it, so no face is coplanar).
 const MARK_LIFT = 0.006
 const WALKWAY_WIDTH = 1.5
-/** Loading zone outline painted in bay A (local frame), around the trailer's parking position. */
-const LOADING_ZONE = { bay: 'A', x0: 18, x1: 34, z0: -28, z1: -62 } as const
 // Fixtures.
 const ROLL_WHEEL_R = 0.32
 const ROLL_WHEEL_W = 0.26
@@ -740,9 +738,9 @@ function buildFloor(d: Dims, cfg: GeminiFactoryConfig, add: Add) {
   }
 
   // Loading zone outline (only if its bay exists and the zone fits inside the hall).
-  const zone = LOADING_ZONE
-  const zoneBay = d.bays.find((bay) => bay.name === zone.bay)
-  if (zoneBay && zone.x0 > zoneBay.x0 && zone.x1 < zoneBay.x1 && zone.z0 < inner.z0 && zone.z1 > inner.z1) {
+  const zone = cfg.floor.loadingZone
+  const zoneBay = zone && d.bays.find((bay) => bay.name === zone.bay)
+  if (zone && zoneBay && zone.x0 > zoneBay.x0 && zone.x1 < zoneBay.x1 && zone.z0 < inner.z0 && zone.z1 > inner.z1) {
     lineAlongX(zone.z0, zone.x0 - mw / 2, zone.x1 + mw / 2)
     lineAlongX(zone.z1, zone.x0 - mw / 2, zone.x1 + mw / 2)
     lineAlongZ(zone.x0, zone.z0 - mw / 2, zone.z1 + mw / 2)

@@ -488,9 +488,9 @@ export const SCENE_01_CONFIG: Scene01Config = {
       // bay doors — with the combination stopped on the highway beyond the gate, so the reverse into bay A reads clearly.
       entry: {
         direction: [0, 0.194, 1],
-        fitWidth: 104,
+        fitWidth: 122,
         fitHeight: 32,
-        targetOffset: [450, 2.6, 12],
+        targetOffset: [452, 2.6, 12],
         maxDistance: 220,
         portrait: { fitWidth: 62, maxDistance: 280, targetOffset: [469.5, 2.6, 12] },
       },
@@ -508,7 +508,8 @@ export const SCENE_01_CONFIG: Scene01Config = {
       lift: {
         ...LOADING_FRAMING,
         fitHeight: 32,
-        maxDistance: 52,
+        // 39 m keeps the camera inside bay A on 4:3-class screens, clear of the runway girders on the bay B/A column line.
+        maxDistance: 39,
         screenOffset: [-0.4, -0.3],
         // Portrait: a lower camera (6° elevation) instead of a further one, so it stays under the trusses and inside the
         // door wall while the whole crane bridge fits above the combination.
@@ -572,6 +573,8 @@ export const SCENE_01_CONFIG: Scene01Config = {
         compound: { width: [60, 110], depth: [55, 90], gap: [8, 20], wallHeight: 2.4, setback: 2.5 },
         buildings: { height: [8, 16], tankChance: 0.35, stackChance: 0.2 },
         accessRoadWidth: 12,
+        // Across the far verge (2.5 m) and shoulder (2 m) to the carriageway edge.
+        roadReach: 4.5,
         colors: { wall: '#5d6168', shed: '#6b7178', roof: '#464c53', tank: '#8a9097', stack: '#5a6067', road: '#2a2c2f', accent: '#c99a2e' },
       },
     },
@@ -579,10 +582,12 @@ export const SCENE_01_CONFIG: Scene01Config = {
     // road. Slot origin on the front wall line at bay B/A's shared column line (world x 430, z 6).
     factory: {
       enabled: true,
-      slot: { position: [430, 0, 6], rotationY: 0, bounds: { min: [-46, 0, -121], max: [100, 26, 21] }, model: null },
+      slot: { position: [430, 0, 6], rotationY: 0, bounds: { min: [-46, 0, -121], max: [100, 28, 21] }, model: null },
       building: {
         length: 120,
-        eavesHeight: 22,
+        // 25.5 m eaves: the truss bottom chords (eaves − depth) stay 1.2 m above the crane's highest part (rail 17 m +
+        // its 4.7 m bridge and crab); luminaires hang between the trusses above the crane.
+        eavesHeight: 25.5,
         parapetHeight: 1.2,
         bays: [
           { name: 'B', x0: -36, x1: 0, door: { x0: -32, x1: -4, height: 16 }, hasCrane: true },
@@ -593,8 +598,9 @@ export const SCENE_01_CONFIG: Scene01Config = {
         craneRunway: { railHeight: 17, girderDepth: 1.6, girderWidth: 0.7 },
         trusses: { spacing: 8, depth: 2.6 },
         claddingHeight: 13,
-        floor: { color: '#55595e', markingColor: '#c9a33a', markingWidth: 0.15 },
-        luminaires: { height: 19.5, spacing: 8, color: '#e4ecf4', intensity: 1.6 },
+        // The loading bay painted where the trailer parks (clear of the vessel's resting place to its left).
+        floor: { color: '#55595e', markingColor: '#c9a33a', markingWidth: 0.15, loadingZone: { bay: 'A', x0: 20, x1: 30.5, z0: -28, z1: -62 } },
+        luminaires: { height: 22.4, spacing: 8, color: '#e4ecf4', intensity: 1.6 },
         fixtures: [
           { kind: 'turningRolls', position: [22, 0, -88], yaw: Math.PI / 2, length: 12, vesselDiameter: 3.8 },
           { kind: 'weldingManipulator', position: [14, 0, -88], yaw: Math.PI / 2, boomLength: 7, columnHeight: 9, boomHeight: 6.5 },
@@ -649,7 +655,8 @@ export const SCENE_01_CONFIG: Scene01Config = {
       enabled: true,
       slot: { position: [451, 0, 0], rotationY: 0, bounds: { min: [-21, 0, -120], max: [21, 22.5, 6] }, model: null },
       crane: {
-        span: 41,
+        // Bay A's rail centre lines are 0.85 m inside its column lines (factoryLayout.runwayInset): 42 − 2 × 0.85.
+        span: 40.3,
         railHeight: 17,
         bridge: { girderDepth: 2.0, girderWidth: 0.8, girderGap: 2.6, endTruckLength: 6, color: '#4c5560', accentColor: '#d6a630' },
         trolley: { length: 4.2, width: 4.0, height: 1.8, color: '#3f4852' },
@@ -863,7 +870,29 @@ export const SCENE_01_CONFIG: Scene01Config = {
     // hides it until the daylight haze takes over.
     city: {
       enabled: true,
-      slot: { position: [0, 0, -95], rotationY: 0, bounds: { min: [-1200, 0, -845], max: [2400, 170, 0] }, model: null },
+      slot: {
+        position: [0, 0, -95],
+        rotationY: 0,
+        bounds: { min: [-1200, 0, -845], max: [2400, 170, 0] },
+        // The detailed city: one 400 × 400 m block (Sketchfab "City" by Mateusz Woliński, CC BY 4.0 — see README,
+        // Third-party assets) tiled four times along the road at the pitch of its street base, from world x −1400 to
+        // 200: it ENDS where the city journey ends, so the industrial area and the factory (x 300 on) have open ground
+        // behind them and the drive leaves the city. Every other tile is turned round (so neighbours differ) and 3 cm
+        // higher (its kerb strips reach 3.6 m into the next tile and must not z-fight with it). Its front edge is 50 m
+        // behind the slot origin (world z −145, 80 m behind the garage); street level 0.25 m above the ground plane;
+        // merged to one draw call per material per tile. The procedural stand-in remains the fallback while the
+        // 14.5 MB file loads or if it is missing.
+        model: {
+          url: `${import.meta.env.BASE_URL}models/environment/city.glb`,
+          scale: 1,
+          position: [212.53, 0.37, 208.67],
+          rotation: [0, 0, 0],
+          castShadow: false,
+          receiveShadow: false,
+          mergeByMaterial: true,
+          instances: [-3, -2, -1, 0].map((k) => ({ position: [k * 400, k % 2 ? 0.03 : 0, -250] as Vec3, rotationY: k % 2 ? Math.PI : 0 })),
+        },
+      },
       seed: 20251,
       span: [-1200, 2400],
       skyline: { zRange: [-365, -805], width: [18, 44], depth: [18, 36], height: [30, 78], gap: [1, 9], landmarkChance: 0.12, landmarkHeight: [90, 128] },

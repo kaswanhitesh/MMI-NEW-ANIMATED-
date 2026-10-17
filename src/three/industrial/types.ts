@@ -183,7 +183,11 @@ export interface GeminiFactoryConfig {
   trusses: { spacing: number; depth: number }
   /** Clad wall band height above the floor before the clerestory glazing begins. */
   claddingHeight: number
-  floor: { color: string; markingColor: string; markingWidth: number }
+  /**
+   * Concrete slab and painted markings. `loadingZone` (optional) outlines a loading bay on the floor of bay `bay`
+   * (local X range and Z range, z0 nearer the door).
+   */
+  floor: { color: string; markingColor: string; markingWidth: number; loadingZone?: { bay: string; x0: number; x1: number; z0: number; z1: number } }
   luminaires: { height: number; spacing: number; color: string; intensity: number }
   fixtures: readonly FabricationFixture[]
   /** Forecourt in front of the door wall (local +Z side). */
@@ -237,5 +241,7 @@ export interface IndustrialZoneConfig {
   compound: { width: readonly [number, number]; depth: readonly [number, number]; gap: readonly [number, number]; wallHeight: number; setback: number }
   buildings: { height: readonly [number, number]; tankChance: number; stackChance: number }
   accessRoadWidth: number
+  /** Metres the access roads continue past the zone's road edge (local z = 0) towards +Z, to meet the carriageway. */
+  roadReach: number
   colors: { wall: string; shed: string; roof: string; tank: string; stack: string; road: string; accent: string }
 }

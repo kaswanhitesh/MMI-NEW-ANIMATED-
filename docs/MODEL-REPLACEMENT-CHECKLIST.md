@@ -123,7 +123,17 @@ stand-ins only establish the spatial relationships; replace them one at a time.
       (`docs/COORDINATE-SYSTEM.md`) or the trailer's swept path will leave the paving.
 - [ ] Highway and city: keep the highway's far lane centre at world z 28 (the vehicle's path) and the
       city entirely behind the garage (world z < −70) so nothing stands between the camera and the
-      vehicle. The city must cover world x −1200 … 1500 (the widest view over the whole journey).
+      vehicle. The city must cover the views of the garage and the city journey (world x −1200 … 330 at
+      the widest aspect) and should end before the industrial area (x 300 on), so the drive leaves it.
+- [ ] A model smaller than its slot can be repeated: `model.instances` lists extra placements
+      (slot-local position and yaw; the model's own `position` / `rotation` / `scale` apply inside each).
+      Static scenery with many nodes should set `model.mergeByMaterial: true` (one draw call per
+      material per copy instead of one per node). The city is done this way: one 400 × 400 m block
+      (`city.glb`, CC BY 4.0 — see the README, "Third-party assets") placed four times at the pitch of
+      its street base from world x −1400 to 200 (where the city journey ends: the industrial area and
+      the factory keep open ground behind them), alternate copies turned 180° and 3 cm higher (its
+      kerb strips overhang into the next copy), its street level lifted 0.25 m above the ground plane
+      so the two never z-fight.
 - [ ] Re-run the checks in section 6.
 
 ## 8. Replacing the factory, the crane and the cargo
@@ -143,6 +153,8 @@ fallback while the file loads or if it is missing.
       one. The scene sets `bridge.position.z`, `trolley.position.x` and `hook.position.y` every frame
       from the crane pose (in the model's units), so author the trolley and hook with their origins
       at y = 0 on the crane's centre line and the hook's slinging point at the hook node's origin.
+      Keep `model.position` and `model.rotation` at zero (the config validation warns otherwise; use
+      `scale`, or move the slot) and do not set `mergeByMaterial` (it would merge the named nodes away).
       Hoist ropes must belong to the hook node (long enough to reach into the trolley at the lowest
       hook position). The spreader, slings and shackles stay procedural.
 - [ ] Cargo (`industry.cargo.slot`, frame: the vessel's — axis along X, y = 0 at its lowest point,

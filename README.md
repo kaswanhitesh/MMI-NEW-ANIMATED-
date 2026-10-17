@@ -92,4 +92,13 @@ docs/                   architecture, coordinate system, model replacement check
 ```
 
 Full explanation: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Third-party assets
+
+- The city behind the garage and along the highway is **"City" by Mateusz Woliński**
+  ([sketchfab.com/jeandiz](https://sketchfab.com/jeandiz)), from
+  [sketchfab.com/3d-models/city-1f50f0d6ec5a493d8e91d7db1106b324](https://sketchfab.com/3d-models/city-1f50f0d6ec5a493d8e91d7db1106b324),
+  licensed [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) — `public/models/environment/city.glb`,
+  tiled four times by `environment.city.slot.model`. The licence requires this attribution wherever the
+  site is published (a credits line in the footer or a credits page).
 Coordinate conventions: [`docs/COORDINATE-SYSTEM.md`](docs/COORDINATE-SYSTEM.md).

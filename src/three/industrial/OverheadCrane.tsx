@@ -162,6 +162,20 @@ function ropeLayout(ropeCount: number): Array<readonly [number, number]> {
   return out
 }
 
+/**
+ * Highest point of the bridge and the trolley (crane-local Y, the walkway handrail and the crab's machinery included):
+ * the factory's roof structure and luminaires must stay above it. Pure.
+ */
+export function craneTopY(config: OverheadCraneConfig): number {
+  const layout = layoutCrane(config)
+  let top = config.railHeight
+  for (const parts of [layout.bridgeSteel, layout.bridgeHandrail, layout.bridgeMachinery, layout.bridgeRound, layout.trolleyFrame, layout.trolleyMachinery, layout.trolleyRound]) {
+    // Rotated cylinders lie along X or Z: their vertical extent is then their diameter (size.x), not their length.
+    for (const p of parts) top = Math.max(top, p.position[1] + (p.rotation ? Math.max(p.size[0], p.size[2]) : p.size[1]) / 2)
+  }
+  return top
+}
+
 /** Lays out every static part of the bridge and the trolley in their own groups' frames. Pure. */
 function layoutCrane(cfg: OverheadCraneConfig): CraneLayout {
   const { span, railHeight, bridge, trolley, hoist } = cfg

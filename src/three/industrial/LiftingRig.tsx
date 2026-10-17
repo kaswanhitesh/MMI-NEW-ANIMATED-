@@ -30,10 +30,12 @@
  *    The scene should put each SlingPose.top on a bottom hole at
  *    centre ± (length/2)·axis − (0, depth/2 + offset, 0).
  *  - Lower slings: with slack 0, one straight cylinder from `top` to the
- *    shackle crown. With slack > 0, a quadratic Bézier drawn as
- *    `sling.segments` short cylinders. Its control point is pushed sideways,
- *    perpendicular to the spreader axis (+ for even sling indices, − for odd
- *    ones), by slack × 1.2, and down by slack × 0.25.
+ *    shackle crown. With slack > 0 the rope keeps its length (chord + slack):
+ *    a quadratic Bézier drawn as `sling.segments` short cylinders whose
+ *    control point is pushed sideways, perpendicular to the spreader axis
+ *    (+ for even sling indices, − for odd ones), by twice the sagitta of a
+ *    parabola of that length over the chord, √(3·chord·slack / 8) × 2, and
+ *    down by slack × 0.25 so the bow hangs low.
  *  - Shackles: the PIN centre is always at SlingPose.bottom, so when attached
  *    the pin sits in the lug's hole and the bow straddles the lug plate. The
  *    pin is horizontal and perpendicular to the spreader axis, matching lug
@@ -75,8 +77,7 @@ const PADEYE_HEIGHT = 0.28
 const PADEYE_WIDTH = 0.3
 const PADEYE_THICKNESS = 0.05
 const PADEYE_BOSS_RADIUS = 0.075
-/** Bézier control-point displacement per metre of slack: sideways (perpendicular to the spreader axis) and down. */
-const SAG_SIDEWAYS = 1.2
+/** Bézier control-point drop per metre of slack (the sideways bow is derived from the rope length, see the header). */
 const SAG_DOWN = 0.25
 const SLACK_EPSILON = 1e-4
 const HIDDEN_BELOW = 0.01
@@ -274,10 +275,14 @@ function placeRig(
       writeCylinder(slings, index++, _top, _crown, diameter, 0)
     } else {
       const side = k % 2 === 0 ? 1 : -1
+      // A parabola of length chord + slack over the chord has sagitta h ≈ √(3·chord·slack / 8); the Bézier's
+      // midpoint sits halfway to its control point, so the control point goes out by 2h.
+      const chord = _top.distanceTo(_crown)
+      const bow = 2 * Math.sqrt((3 * chord * sling.slack) / 8)
       _ctrl
         .addVectors(_top, _crown)
         .multiplyScalar(0.5)
-        .addScaledVector(_perp, side * sling.slack * SAG_SIDEWAYS)
+        .addScaledVector(_perp, side * bow)
       _ctrl.y -= sling.slack * SAG_DOWN
       _a.copy(_top)
       for (let j = 1; j <= segments; j++) {

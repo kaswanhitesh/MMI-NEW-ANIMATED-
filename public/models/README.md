@@ -20,6 +20,11 @@ setting its slot's `model` in `src/scenes/scene-01-coupling/config.ts` (e.g.
 does not exist yet. See `docs/MODEL-REPLACEMENT-CHECKLIST.md`, sections 7 and 8 (a crane model needs
 `bridge`, `trolley` and `hook` nodes to be animated).
 
+Shipped: `environment/city.glb` — **"City" by Mateusz Woliński** (sketchfab.com/jeandiz), from
+https://sketchfab.com/3d-models/city-1f50f0d6ec5a493d8e91d7db1106b324, licensed **CC BY 4.0**
+(http://creativecommons.org/licenses/by/4.0/). 14.5 MB, 80k triangles, 12 textures of 1024². The licence
+requires visible attribution wherever the site is published. Used by `environment.city.slot.model`.
+
 ## Requirements for the delivered vehicle files
 
 (Environment and equipment models are different: they are not normalised, grounded or centred.

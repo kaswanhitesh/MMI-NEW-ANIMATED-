@@ -30,6 +30,8 @@ import { FleetGarage } from '../../../three/environment/FleetGarage'
 import { Highway } from '../../../three/environment/Highway'
 import { ProceduralEnvironment } from '../../../three/environment/ProceduralEnvironment'
 import { slotToWorld, worldToSlot } from '../../../three/environment/slotSpace'
+import type { EnvironmentSlotConfig } from '../../../three/environment/types'
+import { industrialZoneRoadMouths } from '../../../three/industrial/IndustrialZone'
 import { StageLighting } from '../../../three/environment/StageLighting'
 import { YardFloor } from '../../../three/environment/YardFloor'
 import { SCENE_01_CONFIG, type Scene01Config } from '../config'
@@ -163,15 +165,21 @@ export function CouplingStage({ rig, pose, layout, config = SCENE_01_CONFIG }: C
   const farEdgeGaps = useMemo<ReadonlyArray<readonly [number, number]>>(() => {
     const gaps: Array<readonly [number, number]> = []
     if (env.road.enabled && exitRoad.junction) gaps.push(exitRoad.junction)
+    const toHighway = (slot: EnvironmentSlotConfig, x0: number, x1: number, z: number): readonly [number, number] => {
+      const [a] = worldToSlot(env.highway.slot, slotToWorld(slot, [x0, z]))
+      const [b] = worldToSlot(env.highway.slot, slotToWorld(slot, [x1, z]))
+      return [Math.min(a, b), Math.max(a, b)]
+    }
     const fac = config.industry.factory
     if (fac.enabled) {
       const { driveway } = fac.building.forecourt
-      const [a] = worldToSlot(env.highway.slot, slotToWorld(fac.slot, [driveway.x0, driveway.toZ]))
-      const [b] = worldToSlot(env.highway.slot, slotToWorld(fac.slot, [driveway.x1, driveway.toZ]))
-      gaps.push([Math.min(a, b), Math.max(a, b)])
+      gaps.push(toHighway(fac.slot, driveway.x0, driveway.x1, driveway.toZ))
     }
+    // The industrial compounds' access roads.
+    const zone = config.industry.zone
+    if (zone.enabled) for (const [x0, x1] of industrialZoneRoadMouths(zone.config)) gaps.push(toHighway(zone.slot, x0, x1, zone.config.roadReach))
     return gaps
-  }, [env.road.enabled, env.highway.slot, exitRoad, config.industry.factory])
+  }, [env.road.enabled, env.highway.slot, exitRoad, config.industry.factory, config.industry.zone])
 
   // Stable identity: FleetGarage re-clones its fade materials whenever this object changes.
   const garageFleet = useMemo(

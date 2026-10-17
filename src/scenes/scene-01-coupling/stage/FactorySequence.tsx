@@ -82,25 +82,28 @@ function Cargo({ config, getPose }: { config: Scene01Config['industry']['cargo']
 /**
  * Drives a replacement crane model: finds its `bridge`, `trolley` and `hook` nodes (see config `industry.crane`) inside
  * the crane slot and places them from the crane pose every frame. Does nothing for the procedural crane, which places
- * its own parts (its groups are named `crane:*`).
+ * its own parts (its groups are named `crane:*`). The nodes are looked up again whenever the slot's content changes
+ * (the model finishing loading, or a fallback), and the frame is re-rendered once they are found.
  */
 function CraneModelDriver({ model, getPose }: { model: EnvironmentModelConfig; getPose: () => CranePose }) {
   const ref = useRef<Group>(null)
-  const nodes = useRef<{ bridge?: Object3D; trolley?: Object3D; hook?: Object3D; lookup: number }>({ lookup: 0 })
+  const invalidate = useThree((state) => state.invalidate)
+  const nodes = useRef<{ bridge?: Object3D; trolley?: Object3D; hook?: Object3D; signature: number }>({ signature: -1 })
   useFrame(() => {
     const slot = ref.current?.parent
     if (!slot) return
     const cache = nodes.current
-    // (Re)resolve the nodes when none are cached or the model they belong to was unmounted; while the model is still
-    // loading, look again every 30 frames rather than searching the slot every frame.
-    if (!cache.bridge || !isInside(cache.bridge, slot)) {
-      if (cache.lookup-- > 0) return
-      cache.lookup = 30
+    // The slot's direct children change when the model replaces the stand-in (or the reverse): cheap to compare.
+    let signature = slot.children.length
+    for (const child of slot.children) signature = (signature * 31 + child.id) | 0
+    if (signature !== cache.signature || (cache.bridge && !isInside(cache.bridge, slot))) {
+      cache.signature = signature
       cache.bridge = slot.getObjectByName('bridge')
       cache.trolley = cache.bridge?.getObjectByName('trolley')
       cache.hook = cache.trolley?.getObjectByName('hook')
-      if (!cache.bridge) return
+      if (cache.bridge) invalidate()
     }
+    if (!cache.bridge) return
     const p = getPose()
     const k = 1 / (model.scale || 1)
     cache.bridge.position.z = p.bridgeZ * k

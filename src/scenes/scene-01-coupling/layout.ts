@@ -10,7 +10,9 @@ import type { ModelManifestEntry, Vec3 } from '../../three/assets/types'
 import { worldToSlot } from '../../three/environment/slotSpace'
 import { SCENE_01_CONFIG, SCENE_01_PHASE_ORDER, type Scene01Config } from './config'
 import { createDeparturePath, createJourneyGeometry, describeExitRoad, placeOnPath, type JourneyGeometry, type TrailerTracking } from './departurePath'
+import { craneRunwayLines } from '../../three/industrial/factoryLayout'
 import { SPREADER_PADEYE_HOLE_OFFSET } from '../../three/industrial/LiftingRig'
+import { craneTopY } from '../../three/industrial/OverheadCrane'
 import { resolveLoadingGeometry, saddleHornHeight, type LoadingGeometry } from './loading'
 import { createPose, type CouplingPose } from './rig'
 
@@ -304,5 +306,27 @@ function validateFactorySequence(layout: AssemblyLayout, config: Scene01Config, 
   const hookOver = (bottom: number, extra: number) => bottom + pinY + ld.rigging.slingLength + holeDrop + extra + ld.rigging.topSlingRise
   const highest = Math.max(ld.crane.parkHookY, hookOver(loading.liftBottom, 0), hookOver(loading.rest[1], ld.crane.approachClearance), hookOver(loading.deck[1], ld.crane.approachClearance))
   if (highest > ld.crane.maxHookY + 1e-9) warnings.push(`The loading needs the hook at ${highest.toFixed(2)} m but loading.crane.maxHookY is ${ld.crane.maxHookY} m — shorten the slings or lower the lift.`)
+
+  // The crane must run on bay A's rails and fit under the roof structure and the luminaires.
+  const craneCfg = config.industry.crane
+  if (craneCfg.enabled && fac.enabled) {
+    const building = fac.building
+    const runway = craneRunwayLines(building).find((r) => r.bay === (fac.building.floor.loadingZone?.bay ?? 'A'))
+    if (runway) {
+      const railSpan = runway.x1 - runway.x0
+      if (Math.abs(craneCfg.crane.span - railSpan) > 0.05) warnings.push(`industry.crane.crane.span (${craneCfg.crane.span} m) must equal the rail spacing of bay ${runway.bay} (${railSpan.toFixed(2)} m) so the wheels run on the rails.`)
+      const [cx] = worldToSlot(fac.slot, [craneCfg.slot.position[0], craneCfg.slot.position[2]])
+      if (Math.abs(cx - (runway.x0 + runway.x1) / 2) > 0.05 || Math.abs(craneCfg.slot.rotationY - fac.slot.rotationY) > 1e-6) warnings.push('industry.crane.slot must sit on the rails\' centre line, aligned with the factory.')
+      if (Math.abs(craneCfg.crane.railHeight - runway.railHeight) > 1e-6) warnings.push(`industry.crane.crane.railHeight (${craneCfg.crane.railHeight}) must equal the factory's craneRunway.railHeight (${runway.railHeight}).`)
+    }
+    const top = craneTopY(craneCfg.crane) + craneCfg.slot.position[1] - fac.slot.position[1]
+    const trussBottom = building.eavesHeight - building.trusses.depth
+    if (top > trussBottom - 0.5) warnings.push(`The crane's highest point (${top.toFixed(2)} m) reaches the roof trusses (bottom chords at ${trussBottom.toFixed(2)} m) — raise eavesHeight or lower the rails.`)
+    if (building.luminaires.height - 0.1 < top + 0.3) warnings.push(`The luminaires (${building.luminaires.height} m) hang where the crane runs (its top at ${top.toFixed(2)} m).`)
+    const model = craneCfg.slot.model
+    if (model && (model.position.some((v) => v !== 0) || model.rotation.some((v) => v !== 0))) {
+      warnings.push('industry.crane.slot.model: position and rotation must be zero — the bridge/trolley/hook nodes are driven in the crane frame (use scale, or move the slot).')
+    }
+  }
   return warnings
 }

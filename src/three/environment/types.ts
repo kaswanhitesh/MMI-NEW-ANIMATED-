@@ -47,6 +47,18 @@ export interface EnvironmentModelConfig {
   rotation: Vec3
   castShadow: boolean
   receiveShadow: boolean
+  /**
+   * Repeats the model: one copy per entry, placed in slot-local metres with a yaw about Y (e.g. a city block tiled
+   * along the road). `position` / `rotation` / `scale` above apply inside every copy. Omitted = one copy at the slot
+   * origin. Copies share geometry and materials.
+   */
+  instances?: ReadonlyArray<{ position: Vec3; rotationY: number }>
+  /**
+   * Bake the node transforms and merge every mesh that shares a material (and vertex layout) into ONE mesh when the
+   * model loads: one draw call per material instead of one per node. Static scenery only — animation, per-node
+   * visibility and multi-material meshes are not merged (the latter are kept as they are).
+   */
+  mergeByMaterial?: boolean
 }
 
 /**
