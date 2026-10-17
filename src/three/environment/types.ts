@@ -45,4 +45,45 @@ export interface YardEnvironmentConfig {
   /** Subtle painted yard markings on the floor — restrained environmental detail. */
   markings: { color: string; opacity: number; laneHalfWidth: number; length: number; stripeLength: number; stripeGap: number }
   contactShadow: { opacity: number; blur: number; width: number; height: number; far: number }
+  /** Procedural industrial warehouse behind the yard; its opacity is driven by the scene's animation rig. */
+  warehouse: WarehouseConfig
+}
+
+/**
+ * A large, restrained logistics warehouse facade built from boxes (precast
+ * wall with panel seams and pilasters, raised loading dock with dock doors,
+ * bumpers and strip lights, canopy, clerestory band, fascia, roof slab).
+ * All dimensions in metres. The facade's front plane is at `position[2]` and
+ * the building extends towards −Z; `position[1]` is ignored (it stands on the
+ * scene's ground plane).
+ */
+export interface WarehouseConfig {
+  enabled: boolean
+  /** Fraction (0–1) of the vehicles' approach phase at which the fade-in starts; it completes when they arrive. */
+  fadeStartPortion: number
+  position: Vec3
+  width: number
+  height: number
+  depth: number
+  dock: { height: number; depth: number }
+  bays: { count: number; pitch: number; doorWidth: number; doorHeight: number }
+  canopy: { height: number; depth: number; thickness: number }
+  /** Spacing of the vertical precast panel seams along the wall. */
+  panelSeamPitch: number
+  colors: {
+    wall: string
+    fascia: string
+    plinth: string
+    pilaster: string
+    door: string
+    frame: string
+    seam: string
+    bumper: string
+    canopy: string
+    roof: string
+    clerestory: string
+    lightStrip: string
+  }
+  /** Emissive strength of the strip lights above the dock doors (0 = off). */
+  lightStripIntensity: number
 }

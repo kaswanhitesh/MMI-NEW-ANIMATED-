@@ -89,6 +89,8 @@ export interface Scene01Config {
     /** Shared ease for both vehicles' travel — identical so they move and arrive together. */
     approach: string
     heroDolly: string
+    /** Ease of the warehouse fade-in during the second part of the approach. */
+    warehouseFade: string
     overlay: string
   }
   overlay: {
@@ -174,6 +176,35 @@ export const SCENE_01_CONFIG: Scene01Config = {
     floor: { size: 320, color: '#17191d', roughness: 0.94, metalness: 0.04, envMapIntensity: 0.35 },
     markings: { color: '#454b53', opacity: 0.6, laneHalfWidth: 2.4, length: 90, stripeLength: 2.4, stripeGap: 1.6 },
     contactShadow: { opacity: 0.55, blur: 2.2, width: 80, height: 14, far: 3 },
+    // Cinematic backdrop: invisible while the vehicles enter, fades in from 40% of the approach and is fully
+    // visible the moment they couple. The facade stands 28 m behind the coupling line and spans the frame.
+    warehouse: {
+      enabled: true,
+      fadeStartPortion: 0.4,
+      position: [0, 0, -28],
+      width: 170,
+      height: 10.5,
+      depth: 34,
+      dock: { height: 1.25, depth: 2.6 },
+      bays: { count: 9, pitch: 7.2, doorWidth: 3.4, doorHeight: 4.2 },
+      canopy: { height: 6.9, depth: 3.6, thickness: 0.3 },
+      panelSeamPitch: 2.5,
+      colors: {
+        wall: '#3f444a',
+        fascia: '#2b2f34',
+        plinth: '#34383e',
+        pilaster: '#383d43',
+        door: '#4c5158',
+        frame: '#1f2226',
+        seam: '#282c31',
+        bumper: '#111213',
+        canopy: '#30343a',
+        roof: '#24272b',
+        clerestory: '#5a636c',
+        lightStrip: '#ffe3b8',
+      },
+      lightStripIntensity: 1.0,
+    },
   },
 
   scroll: {
@@ -195,6 +226,7 @@ export const SCENE_01_CONFIG: Scene01Config = {
   easing: {
     approach: 'power2.inOut',
     heroDolly: 'power1.inOut',
+    warehouseFade: 'power1.inOut',
     overlay: 'power1.out',
   },
 

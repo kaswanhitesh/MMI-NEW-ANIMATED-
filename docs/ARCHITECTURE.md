@@ -58,7 +58,8 @@ scroll position
    │  ScrollTrigger (pin + scrub)
    ▼
 GSAP timeline (duration 1, labels per phase)       ← config.phases / easing
-   │  one `approach` window: puller and trailer tween to their connected positions together
+   │  one `approach` window: puller and trailer tween to their connected positions together;
+   │  from 40% of that window the warehouse backdrop's opacity tweens 0 → 1, reaching 1 as they arrive
    │  tweens plain numbers on the rig
    ▼
 CouplingRig { puller.x, trailer.x, camera.heroBlend, overlay.* }
@@ -135,6 +136,11 @@ Engine-layer pieces (`SceneCanvas`, `useFramedCamera`, `StageLighting`, `YardFlo
 - **Tone mapping and the horizon** — ACES tone mapping darkens dark colours, and the renderer's
   clear colour is not tone-mapped, so a fogged floor would show its far edge as a line. The floor
   and markings materials are therefore `toneMapped: false`; vehicles keep ACES.
+- **Warehouse backdrop** — `src/three/environment/Warehouse.tsx` is a procedural loading-dock facade
+  (boxes in ~14 instanced draw calls, no textures). Its materials are transparent with depth writes
+  off and explicit back-to-front render orders, and the stage writes `rig.warehouse.opacity` into
+  them every rendered frame, so the same scrubbed timeline fades it in and out. It casts no shadows,
+  which would otherwise land at full strength before the building had appeared.
 - **Fog on portrait screens** — the responsive camera backs off far on phones; `stage/fogDepths.ts`
   pushes the fog band out past the framed subject so the vehicles never fog out.
 - **Reduced motion** — `gsap.matchMedia` renders the completed combination statically with all copy

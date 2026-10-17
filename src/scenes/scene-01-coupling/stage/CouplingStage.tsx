@@ -13,6 +13,7 @@ import type { FramedCameraSpec } from '../../../three/camera/types'
 import { useFramedCamera } from '../../../three/camera/useFramedCamera'
 import { ProceduralEnvironment } from '../../../three/environment/ProceduralEnvironment'
 import { StageLighting } from '../../../three/environment/StageLighting'
+import { Warehouse } from '../../../three/environment/Warehouse'
 import { YardFloor } from '../../../three/environment/YardFloor'
 import { SCENE_01_CONFIG, type Scene01Config } from '../config'
 import type { AssemblyLayout } from '../layout'
@@ -65,6 +66,9 @@ export function CouplingStage({ rig, layout, config = SCENE_01_CONFIG }: Couplin
       <ProceduralEnvironment intensity={config.lighting.environmentIntensity} />
       <StageLighting lighting={config.lighting} shadowCentre={shadowCentre} />
       <YardFloor environment={config.environment} groundY={config.world.groundY} shadowCentre={shadowCentre} />
+      {config.environment.warehouse.enabled && (
+        <Warehouse config={config.environment.warehouse} groundY={config.world.groundY} getOpacity={() => rig.warehouse.opacity} />
+      )}
       <CameraRig spec={config.camera} rig={rig} />
       <PullerTruck rig={rig} layout={layout} config={config} />
       <HydraulicAxleTrailer rig={rig} layout={layout} config={config} />
