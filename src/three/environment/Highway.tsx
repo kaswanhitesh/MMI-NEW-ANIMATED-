@@ -53,10 +53,10 @@ interface LightBox {
   size: [number, number, number]
 }
 
-/** Street-light boxes (poles, arms, lamp heads) along the far verge, skipping the excluded stretches. */
 /** Clear distance (m) kept between a street light and a junction mouth on the far side. */
 const JUNCTION_CLEARANCE = 4
 
+/** Street-light boxes (poles, arms, lamp heads) along the far verge, skipping the excluded stretches and junctions. */
 function buildStreetLights(config: HighwayConfig, groundY: number, junctions: ReadonlyArray<readonly [number, number]>): { poles: LightBox[]; lamps: LightBox[] } {
   const sl = config.streetLights
   const poles: LightBox[] = []

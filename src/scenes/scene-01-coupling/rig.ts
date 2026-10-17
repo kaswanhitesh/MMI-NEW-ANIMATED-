@@ -33,7 +33,7 @@ export interface CouplingRig {
     /**
      * Position along the camera framing sequence (see config.camera.sequence):
      * 0 = base, 1 = coupling push-in, 2 = wide establishing shot, 3 = highway, 4 = city, 5 = factory entry,
-     * 6 = doorway, 7 = loading. Fractions blend.
+     * 6 = doorway, 7 = loading, 8 = lift. Fractions blend.
      */
     stage: number
   }

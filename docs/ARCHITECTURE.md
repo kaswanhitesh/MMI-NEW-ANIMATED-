@@ -213,12 +213,14 @@ Engine-layer pieces (`SceneCanvas`, `useFramedCamera`, `StageLighting`, `YardFlo
 - **Fog per framing** — the responsive camera backs off far on phones and in the wide framings;
   `stage/fogDepths.ts` pushes the fog band out past the framed subject for every framing and the stage
   blends the depths with the camera stage, so the vehicles never fog out.
-- **Level side views** — every camera framing looks along −Z (direction x = 0) with no roll, so any
-  line parallel to X (chassis rails, deck, garage beams, road edges) projects exactly horizontal. The
+- **Level side views** — every journey framing (`base` … `entry`) looks along −Z (direction x = 0) with
+  no roll, so any line parallel to X (chassis rails, deck, garage beams, road edges) projects exactly
+  horizontal. Inside the factory the `doorway`, `loading` and `lift` framings are deliberate
+  three-quarter views (turned off the vehicle's axis), still with no roll. The
   composition is moved by panning the camera parallel to the image plane: `targetOffset` moves the
   target in world space and `screenOffset` places the target at a given screen position (normalised
   device coordinates). The camera is never turned to reframe. `validateScene01Config` warns (in
-  development) about any framing whose direction has a non-zero x.
+  development) about any journey framing whose direction has a non-zero x.
 - **Departure** — `departurePath.ts` is pure: a straight, a 180° left turn of `departure.turnRadius`
   and a straight onto the highway. The puller rides the path; the trailer is pinned at its kingpin to
   the puller's fifth wheel (manifest anchors) and points from a rear reference point further back along
@@ -228,10 +230,13 @@ Engine-layer pieces (`SceneCanvas`, `useFramedCamera`, `StageLighting`, `YardFlo
   combination keeps driving along the final straight and the road, its markings and the street lights
   pass under it at the true speed, with no looping or texture scrolling. The `city` framing has
   `follow: 1`, so the camera translates with the combination and it stays anchored bottom-left. The
-  city stand-in (`CityBackdrop.tsx`) is deliberately simple: seeded rows of industrial sheds, mid-rise
-  blocks and skyline towers behind the garage, one instanced mesh per material with per-instance tone
-  variation. Its span covers the widest view (32:9) over the departure and the whole travel, so no
-  edge comes into view. The sky (`DaylightSky.tsx`) is a camera-following gradient dome.
+  city is the detailed `city.glb` (CC BY 4.0, tiled three times from world x −1000 to `city.modelEnd`
+  = 204, where the city journey ends). From there the procedural bands of `CityBackdrop.tsx` (seeded
+  rows of industrial sheds, mid-rise blocks and skyline towers, one instanced mesh per material) carry
+  on, always drawn, so the city thins out into the industrial area instead of stopping; the same
+  procedural city stands in for the model's part while the file loads or if it is missing. Together
+  they cover the widest view (32:9) over the departure and the whole travel, so no edge of the world
+  comes into view (`citySplit.ts` splits the bands at `modelEnd`). The sky (`DaylightSky.tsx`) is a camera-following gradient dome.
 - **Road, highway and ground layers** — `AccessRoad.tsx` paves the exit road: the U-turn's band,
   10.5 m wide around the path, clipped at the apron kerb and at the far carriageway edge
   (`describeExitRoad`). `Highway.tsx` lays a two-way road with a generated grain texture (mipmapped,

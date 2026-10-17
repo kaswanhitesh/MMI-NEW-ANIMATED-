@@ -34,6 +34,19 @@ export const CRANE_RAIL_HEIGHT = 0.12
 /** Height of the lowest point of a vessel cradled on turning rolls, above the fixture's origin (local y). */
 export const TURNING_ROLLS_VESSEL_BOTTOM = 0.55
 
+/** Roof deck thickness and purlin depth (m): the truss top chords sit under both, below the eaves line. */
+export const ROOF_DECK_THICKNESS = 0.25
+export const ROOF_PURLIN_HEIGHT = 0.3
+
+/**
+ * Heights (local y) of the roof trusses: the top of their top chords (under the purlins) and the bottom of their
+ * bottom chords — the hall's clear height, which the crane and the luminaires must stay under.
+ */
+export function roofTrussLevels(cfg: Pick<GeminiFactoryConfig, 'eavesHeight' | 'trusses'>): { top: number; bottom: number } {
+  const top = Math.max(4, cfg.eavesHeight) - ROOF_DECK_THICKNESS - ROOF_PURLIN_HEIGHT
+  return { top, bottom: Math.min(top - 0.8, Math.max(4, cfg.eavesHeight) - cfg.trusses.depth) }
+}
+
 /** Positions closer than this (m) are the same grid line. */
 const SAME_LINE = 1e-3
 

@@ -19,7 +19,23 @@
  */
 import { useFrame, useLoader, useThree } from '@react-three/fiber'
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react'
-import { Box3, Box3Helper, Color, Group, Mesh, Vector3, type BufferGeometry, type Material, type Object3D } from 'three'
+import {
+  Box3,
+  Box3Helper,
+  Color,
+  Group,
+  Mesh,
+  Vector3,
+  type BufferGeometry,
+  type InstancedMesh,
+  type InterleavedBufferAttribute,
+  type Line,
+  type Material,
+  type Object3D,
+  type Points,
+  type SkinnedMesh,
+  type Sprite,
+} from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { ModelErrorBoundary } from '../assets/ModelErrorBoundary'
 import { ModelLoader, configureModelLoader, getModelLoadErrorMessage } from '../assets/ValidatedGLTFLoader'
@@ -66,6 +82,27 @@ function mergeKey(mesh: Mesh): string {
   return `${material.uuid}|${Object.keys(geometry.attributes).sort().join(',')}|${geometry.index ? 'i' : 'n'}`
 }
 
+/**
+ * Whether a mesh's geometry can be baked into the model's space and merged: a plain mesh with one material, no morph
+ * targets and full-precision, non-interleaved attributes (quantized or normalized attributes would be corrupted by the
+ * bake). Instanced and skinned meshes are never merged.
+ */
+function isMergeable(mesh: Mesh): boolean {
+  if ((mesh as InstancedMesh).isInstancedMesh || (mesh as SkinnedMesh).isSkinnedMesh || Array.isArray(mesh.material)) return false
+  const geometry = mesh.geometry as BufferGeometry
+  if (Object.keys(geometry.morphAttributes).length > 0) return false
+  return Object.values(geometry.attributes).every(
+    (attribute) => !(attribute as InterleavedBufferAttribute).isInterleavedBufferAttribute && attribute.array instanceof Float32Array && !attribute.normalized,
+  )
+}
+
+/** A drawable copied as it is (sharing geometry and material), placed by its world matrix under the merged root. */
+function copyPlaced(object: Object3D): Object3D {
+  const copy = object.clone(false)
+  object.matrixWorld.decompose(copy.position, copy.quaternion, copy.scale)
+  return copy
+}
+
 function prepareModel(scene: Object3D, mergeByMaterial: boolean): PreparedModel {
   if (!mergeByMaterial) return { root: scene.clone(true), dispose: () => {} }
   scene.updateMatrixWorld(true)
@@ -73,19 +110,19 @@ function prepareModel(scene: Object3D, mergeByMaterial: boolean): PreparedModel 
   root.name = 'merged'
   const groups = new Map<string, { material: Material; parts: BufferGeometry[] }>()
   scene.traverse((object) => {
-    if (!(object instanceof Mesh)) return
-    if (Array.isArray(object.material)) {
-      // Multi-material meshes keep their groups: copied as they are.
-      const copy = object.clone()
-      copy.applyMatrix4(object.matrixWorld)
-      root.add(copy)
+    const drawable = object as Partial<Mesh & Points & Line & Sprite>
+    if (!(drawable.isMesh || drawable.isPoints || drawable.isLine || drawable.isSprite)) return
+    if (!drawable.isMesh || !isMergeable(object as Mesh)) {
+      // Anything that cannot be merged keeps its own draw call.
+      root.add(copyPlaced(object))
       return
     }
-    const key = mergeKey(object)
-    const part = (object.geometry as BufferGeometry).clone().applyMatrix4(object.matrixWorld)
+    const mesh = object as Mesh
+    const key = mergeKey(mesh)
+    const part = (mesh.geometry as BufferGeometry).clone().applyMatrix4(mesh.matrixWorld)
     const group = groups.get(key)
     if (group) group.parts.push(part)
-    else groups.set(key, { material: object.material as Material, parts: [part] })
+    else groups.set(key, { material: mesh.material as Material, parts: [part] })
   })
   const created: BufferGeometry[] = []
   for (const { material, parts } of groups.values()) {

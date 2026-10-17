@@ -60,7 +60,8 @@ In `src/scenes/scene-01-coupling/config.ts`:
 - [ ] `camera.framings.*.fitWidth` tighten or loosen each framing (`base`, `heroHold`, `wide`,
       `highway`, `city`); `camera.framings.highway.targetOffset[0]` moves the highway combination
       left/right and `camera.framings.city.screenOffset` places the final city composition on screen.
-      Keep every framing's `direction[0]` at 0 so the side views stay level.
+      Keep the journey framings' (`base` … `entry`) `direction[0]` at 0 so the side views stay level; the
+      factory framings (`doorway`, `loading`, `lift`) are three-quarter views by design.
 - [ ] `departure.turnRadius` / `straightOut` / `straightIn` shape the U-turn;
       `departure.trailerTrackingLength` should be the distance from the trailer's kingpin back to the
       centre of its axle group once the real trailer is in. Keep the coupling anchors accurate: the
@@ -123,15 +124,20 @@ stand-ins only establish the spatial relationships; replace them one at a time.
       (`docs/COORDINATE-SYSTEM.md`) or the trailer's swept path will leave the paving.
 - [ ] Highway and city: keep the highway's far lane centre at world z 28 (the vehicle's path) and the
       city entirely behind the garage (world z < −70) so nothing stands between the camera and the
-      vehicle. The city must cover the views of the garage and the city journey (world x −1200 … 330 at
-      the widest aspect) and should end before the industrial area (x 300 on), so the drive leaves it.
-- [ ] A model smaller than its slot can be repeated: `model.instances` lists extra placements
-      (slot-local position and yaw; the model's own `position` / `rotation` / `scale` apply inside each).
+      vehicle. Together, the city model and the procedural bands beyond `city.modelEnd` must cover the
+      views of the garage and the city journey (world x −1000 … 330 at the widest aspect); a model that
+      covers only part of that sets `city.modelEnd` to the slot-local x where it ends, and the
+      procedural sheds, mid-rise blocks and skyline continue from there (always drawn, so the city
+      thins out instead of stopping). No towers may stand right behind the industrial area or the
+      factory (x 300 on): the drive leaves the city.
+- [ ] A model smaller than its slot can be repeated: `model.instances` lists every placement (it
+      replaces the single default copy at the slot origin; slot-local position and yaw; the model's own
+      `position` / `rotation` / `scale` apply inside each).
       Static scenery with many nodes should set `model.mergeByMaterial: true` (one draw call per
       material per copy instead of one per node). The city is done this way: one 400 × 400 m block
-      (`city.glb`, CC BY 4.0 — see the README, "Third-party assets") placed four times at the pitch of
-      its street base from world x −1400 to 200 (where the city journey ends: the industrial area and
-      the factory keep open ground behind them), alternate copies turned 180° and 3 cm higher (its
+      (`city.glb`, CC BY 4.0 — see the README, "Third-party assets") placed three times at the pitch of
+      its street base from world x −1000 to 204 (`modelEnd`, where the city journey ends; the
+      procedural bands take over from there), alternate copies turned 180° and 3 cm higher (its
       kerb strips overhang into the next copy), its street level lifted 0.25 m above the ground plane
       so the two never z-fight.
 - [ ] Re-run the checks in section 6.
@@ -160,8 +166,8 @@ fallback while the file loads or if it is missing.
 - [ ] Cargo (`industry.cargo.slot`, frame: the vessel's — axis along X, y = 0 at its lowest point,
       x = 0 at the shell middle): the slot frame moves with the vessel, so the model is lifted and
       carried without further work. Keep the dimensions in `industry.cargo.vessel` true to the model:
-      the lug pins (`lugs.x`, `lugs.height`, `holeDiameter`) place the shackles, `diameter` and the
-      saddles' `height` place it on the supports, and `topY` is used for the crane clearances.
+      the lug pins (`lugs.x`, `lugs.height`, `holeDiameter`) place the shackles, and `diameter` and
+      the saddles' `height` place it on the supports.
 - [ ] Saddles (`industry.supports.models.ground` / `.trailer`, frame: origin under the saddle centre
       on its base, X along the vessel axis): the vessel's lowest point rests at the saddle's
       `height`. The trailer saddles ride with the trailer; `loading.cargo.trailerDeckTop` must equal

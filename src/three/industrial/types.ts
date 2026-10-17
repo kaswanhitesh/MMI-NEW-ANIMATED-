@@ -116,7 +116,7 @@ export interface SlingPose {
   top: Vec3
   /** Lower end: the shackle position (on the lug when attached, hanging free otherwise). */
   bottom: Vec3
-  /** Metres of slack: 0 = taut and straight; > 0 = the sling sags by this much in the middle. */
+  /** Excess rope length over the straight chord (m): 0 = taut and straight; > 0 = the sling hangs in a bow (see LiftingRig). */
   slack: number
   /** True once the shackle is pinned to the vessel's lug. */
   attached: boolean

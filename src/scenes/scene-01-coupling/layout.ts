@@ -10,7 +10,7 @@ import type { ModelManifestEntry, Vec3 } from '../../three/assets/types'
 import { worldToSlot } from '../../three/environment/slotSpace'
 import { SCENE_01_CONFIG, SCENE_01_PHASE_ORDER, type Scene01Config } from './config'
 import { createDeparturePath, createJourneyGeometry, describeExitRoad, placeOnPath, type JourneyGeometry, type TrailerTracking } from './departurePath'
-import { craneRunwayLines } from '../../three/industrial/factoryLayout'
+import { craneRunwayLines, roofTrussLevels } from '../../three/industrial/factoryLayout'
 import { SPREADER_PADEYE_HOLE_OFFSET } from '../../three/industrial/LiftingRig'
 import { craneTopY } from '../../three/industrial/OverheadCrane'
 import { resolveLoadingGeometry, saddleHornHeight, type LoadingGeometry } from './loading'
@@ -320,7 +320,7 @@ function validateFactorySequence(layout: AssemblyLayout, config: Scene01Config, 
       if (Math.abs(craneCfg.crane.railHeight - runway.railHeight) > 1e-6) warnings.push(`industry.crane.crane.railHeight (${craneCfg.crane.railHeight}) must equal the factory's craneRunway.railHeight (${runway.railHeight}).`)
     }
     const top = craneTopY(craneCfg.crane) + craneCfg.slot.position[1] - fac.slot.position[1]
-    const trussBottom = building.eavesHeight - building.trusses.depth
+    const trussBottom = roofTrussLevels(building).bottom
     if (top > trussBottom - 0.5) warnings.push(`The crane's highest point (${top.toFixed(2)} m) reaches the roof trusses (bottom chords at ${trussBottom.toFixed(2)} m) — raise eavesHeight or lower the rails.`)
     if (building.luminaires.height - 0.1 < top + 0.3) warnings.push(`The luminaires (${building.luminaires.height} m) hang where the crane runs (its top at ${top.toFixed(2)} m).`)
     const model = craneCfg.slot.model

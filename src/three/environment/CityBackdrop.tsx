@@ -60,7 +60,9 @@ function walkBand(rand: () => number, span: readonly [number, number], band: Cit
   let x = span[0]
   while (x < span[1]) {
     const w = range(rand, band.width)
-    place(x + w / 2, w)
+    // A building that would overrun the span is left out (same draws, so the rest of the layout is unchanged): a
+    // band clipped at the detailed city's end must not reach into the band continuing beyond it.
+    if (x + w <= span[1]) place(x + w / 2, w)
     x += w + range(rand, band.gap)
   }
 }
@@ -173,7 +175,7 @@ function InstancedBoxes({ items, material, geometry, name }: { items: readonly B
   return <instancedMesh key={items.length} ref={ref} name={name} args={[geometry, material, items.length]} />
 }
 
-export function CityBackdrop({ config, groundY }: CityBackdropProps) {
+export function CityBackdrop({ config, groundY, name = 'city' }: CityBackdropProps & { name?: string }) {
   const geometry = useMemo(() => new BoxGeometry(1, 1, 1), [])
   const materials = useMemo(() => createMaterials(config), [config])
   const parts = useMemo(() => buildCity(config, groundY), [config, groundY])
@@ -184,7 +186,7 @@ export function CityBackdrop({ config, groundY }: CityBackdropProps) {
   useEffect(() => () => geometry.dispose(), [geometry])
 
   return (
-    <group name="city">
+    <group name={name}>
       {PART_KEYS.map((key) => (
         <InstancedBoxes key={key} name={`city-${key}`} items={parts[key]} material={materials[key]} geometry={geometry} />
       ))}

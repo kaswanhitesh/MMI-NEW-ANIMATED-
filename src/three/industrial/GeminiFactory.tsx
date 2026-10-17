@@ -78,10 +78,13 @@ import {
   CRANE_RAIL_HEIGHT,
   FACTORY_SLAB_TOP,
   FACTORY_WALL_THICKNESS,
+  ROOF_DECK_THICKNESS,
+  ROOF_PURLIN_HEIGHT,
   TURNING_ROLLS_VESSEL_BOTTOM,
   columnLines,
   columnRows,
   interiorBounds,
+  roofTrussLevels,
   runwayInset,
   type ColumnLine,
   type FactoryRect,
@@ -204,8 +207,8 @@ const BAND_EDGE = 0.05
 const STRIPE_W = 0.14
 const STRIPE_PITCH = 0.55
 // Roof.
-const DECK_T = 0.25
-const PURLIN_H = 0.3
+const DECK_T = ROOF_DECK_THICKNESS
+const PURLIN_H = ROOF_PURLIN_HEIGHT
 const PURLIN_W = 0.18
 const PURLIN_PITCH = 3
 const COPING_H = 0.08
@@ -383,7 +386,7 @@ function deriveDims(cfg: GeminiFactoryConfig): Dims {
       return { name: bay.name, x0, x1, door, hasCrane: bay.hasCrane }
     })
     .sort((a, b) => a.x0 - b.x0)
-  const trussTop = H - DECK_T - PURLIN_H
+  const truss = roofTrussLevels(cfg)
   return {
     H,
     P: Math.max(0, cfg.parapetHeight),
@@ -396,8 +399,8 @@ function deriveDims(cfg: GeminiFactoryConfig): Dims {
     xo1: inner.x1 + T,
     zBackInner: inner.z1,
     zBackOuter: inner.z1 - T,
-    trussTop,
-    trussBottom: Math.min(trussTop - 0.8, H - cfg.trusses.depth),
+    trussTop: truss.top,
+    trussBottom: truss.bottom,
   }
 }
 
