@@ -41,20 +41,18 @@ export interface CouplingRig {
     captionOpacity: number
   }
   garage: {
-    /** Opacity of the fleet-garage backdrop: 0 while the vehicles enter, 1 once they are coupled, back to 0 as they depart. */
-    opacity: number
-  }
-  highway: {
-    /** Opacity of the highway: 0 in the yard, 1 once the combination has departed. */
+    /** Opacity of the garage (and its wall sign): 0 while the vehicles enter, 1 once they are coupled — and it stays 1. */
     opacity: number
   }
   departure: {
     /** Distance (m) the puller has travelled along the departure path; 0 = still at its coupling position. */
     distance: number
   }
+  atmosphere: {
+    /** 0 = enclosed-yard atmosphere (dark backdrop, short fog); 1 = open daylight (sky, long haze, daylight ground). */
+    daylight: number
+  }
   city: {
-    /** Opacity of the city, sky and daylight haze: 0 up to the highway hold, 1 for the city journey. */
-    opacity: number
     /** Metres travelled along the highway beyond the departure path's end (the camera follows). */
     travel: number
   }
@@ -80,7 +78,7 @@ export interface CouplingPose {
 export interface FinalRigState {
   cameraStage: number
   departureDistance: number
-  cityOpacity: number
+  daylight: number
   cityTravel: number
 }
 
@@ -96,9 +94,9 @@ export function createInitialRig(layout: AssemblyLayout): CouplingRig {
     camera: { stage: 0 },
     overlay: { heroOpacity: 1, captionOpacity: 0 },
     garage: { opacity: 0 },
-    highway: { opacity: 0 },
     departure: { distance: 0 },
-    city: { opacity: 0, travel: 0 },
+    atmosphere: { daylight: 0 },
+    city: { travel: 0 },
     progress: 0,
   }
 }
@@ -110,10 +108,10 @@ export function createFinalRig(layout: AssemblyLayout, final: FinalRigState): Co
     trailer: pos(layout.trailerFinal),
     camera: { stage: final.cameraStage },
     overlay: { heroOpacity: 0, captionOpacity: 0 },
-    garage: { opacity: 0 },
-    highway: { opacity: 1 },
+    garage: { opacity: 1 },
     departure: { distance: final.departureDistance },
-    city: { opacity: final.cityOpacity, travel: final.cityTravel },
+    atmosphere: { daylight: final.daylight },
+    city: { travel: final.cityTravel },
     progress: 1,
   }
 }
@@ -126,9 +124,8 @@ export function assignRig(into: CouplingRig, from: CouplingRig): void {
   into.overlay.heroOpacity = from.overlay.heroOpacity
   into.overlay.captionOpacity = from.overlay.captionOpacity
   into.garage.opacity = from.garage.opacity
-  into.highway.opacity = from.highway.opacity
   into.departure.distance = from.departure.distance
-  into.city.opacity = from.city.opacity
+  into.atmosphere.daylight = from.atmosphere.daylight
   into.city.travel = from.city.travel
   into.progress = from.progress
 }

@@ -1,7 +1,15 @@
 /**
- * Scene-agnostic lighting and environment settings consumed by
- * `StageLighting` and `YardFloor`. Scene configs provide these blocks.
- * All positions are ABSOLUTE world positions in metres.
+ * Scene-agnostic lighting and environment settings consumed by the engine's
+ * environment components. Scene configs provide these blocks.
+ *
+ * ENVIRONMENT SLOTS
+ * -----------------
+ * Every large environment (garage, road, highway, city) lives in its own
+ * named, replaceable SLOT: a group with a world transform, a reserved bounding
+ * box, and an optional GLB that replaces the procedural placeholder. The
+ * placeholder geometry of each environment is authored in its slot's LOCAL
+ * space, so moving or rotating a slot moves everything that belongs to it
+ * (the garage's wall sign included). See `EnvironmentSlot.tsx`.
  */
 import type { Vec3 } from '../assets/types'
 
@@ -27,11 +35,41 @@ export interface StageLightingConfig {
   toneMappingExposure: number
 }
 
+/** A detailed GLB that replaces an environment's procedural placeholder. */
+export interface EnvironmentModelConfig {
+  /** Public URL of the GLB, e.g. `${MODEL_BASE_PATH}environment/garage.glb`. */
+  url: string
+  /** Uniform scale that brings the file to metres. */
+  scale: number
+  /** Placement of the model inside its slot (slot-local metres). */
+  position: Vec3
+  /** Euler XYZ rotation (radians) of the model inside its slot. */
+  rotation: Vec3
+  castShadow: boolean
+  receiveShadow: boolean
+}
+
+/**
+ * Where an environment sits and how it can be replaced. `position` /
+ * `rotationY` place the slot's local origin in the world; `bounds` is the
+ * slot-local box reserved for the environment (a replacement model should fit
+ * inside it; development builds can draw it); `model` swaps the procedural
+ * placeholder for a GLB without touching the vehicle rig or the timeline.
+ */
+export interface EnvironmentSlotConfig {
+  position: Vec3
+  /** Rotation about Y (radians). */
+  rotationY: number
+  bounds: { min: Vec3; max: Vec3 }
+  /** null = render the procedural placeholder (no network request). */
+  model: EnvironmentModelConfig | null
+}
+
 export interface YardEnvironmentConfig {
   /**
-   * Scene background AND fog colour. They must be one value: the floor fades
-   * into the fog, and the fog must match what the renderer clears to, or the
-   * floor's far edge shows as a line across the horizon.
+   * Scene background AND enclosed-yard fog colour. They must be one value: the
+   * floor fades into the fog, and the fog must match what the renderer clears
+   * to, or the floor's far edge shows as a line across the horizon.
    */
   backgroundColor: string
   /**
@@ -45,17 +83,33 @@ export interface YardEnvironmentConfig {
   /** Subtle painted yard markings on the floor — restrained environmental detail. */
   markings: { color: string; opacity: number; laneHalfWidth: number; length: number; stripeLength: number; stripeGap: number }
   contactShadow: { opacity: number; blur: number; width: number; height: number; far: number; resolution: number }
-  /** Procedural heavy-haul fleet garage behind the yard; its opacity is driven by the scene's animation rig. */
+  /** Development aid: draw every environment slot's reserved bounds as a wireframe box. */
+  showSlotBounds: boolean
+  /** Open-air daylight (sky, haze, ground tone) the scene blends to as the vehicle leaves the yard. */
+  atmosphere: AtmosphereConfig
+  /** The MMI fleet garage: building, forecourt apron and wall sign. */
   garage: FleetGarageConfig
-  /** Highway the combination departs onto; its opacity is driven by the scene's animation rig. */
+  /** Paved exit road from the garage apron to the highway (outline derived from the vehicle's departure path). */
+  road: AccessRoadConfig
+  /** Highway the combination departs onto. */
   highway: HighwayConfig
-  /** City-edge backdrop (skyline, industry, infrastructure, sky and daylight haze) for the closing journey. */
+  /** City-edge backdrop beyond the garage for the closing journey. */
   city: CityConfig
+}
+
+/** Daylight the scene's fog, sky and ground blend to. Not a replaceable model: it is lighting. */
+export interface AtmosphereConfig {
+  /** Camera-centred gradient sky dome; it fades in with the daylight. */
+  sky: { zenith: string; horizon: string; radius: number }
+  /** Daylight haze the scene fog blends to (colour and camera depths in metres). */
+  haze: { color: string; near: number; far: number }
+  /** Colour the yard/ground blends to in daylight. */
+  groundColor: string
 }
 
 /** A randomised band of buildings: positions and sizes are drawn from these ranges with a seeded generator. */
 export interface CityBuildingBand {
-  /** World Z range (m) of the band's building fronts; larger negative = further from the road. */
+  /** Slot-local Z range (m) of the band's building fronts; more negative = further from the road. */
   zRange: readonly [number, number]
   width: readonly [number, number]
   depth: readonly [number, number]
@@ -65,42 +119,34 @@ export interface CityBuildingBand {
 }
 
 /**
- * Procedural city edge seen beyond the highway: a distant skyline of towers (with occasional taller landmark
- * towers and setback crowns), a band of mid-rise commercial blocks, low industrial sheds with stacks, an elevated
- * metro viaduct and street lights along the highway's far verge, plus a daylight sky and haze. Boxes only, drawn
- * through one InstancedMesh per material; a seeded generator keeps it identical on every load. Everything is
- * behind the road from the camera's point of view; the haze (scene fog) gives it atmospheric depth.
+ * Procedural city-edge stand-in seen beyond the garage and the highway: low
+ * industrial sheds, a band of mid-rise blocks and a distant skyline of towers.
+ * Boxes only, drawn through one InstancedMesh per material; a seeded generator
+ * keeps it identical on every load. Opaque and always present: the scene's
+ * fog hides it in the enclosed-yard atmosphere and the daylight haze reveals it.
  */
 export interface CityConfig {
   enabled: boolean
+  slot: EnvironmentSlotConfig
   seed: number
-  /** World X range (m) the city covers: the whole travel plus the widest view (fog hides the ends). */
+  /** Slot-local X range (m) the city covers: the whole travel plus the widest view. */
   span: readonly [number, number]
   skyline: CityBuildingBand & { landmarkChance: number; landmarkHeight: readonly [number, number] }
   midrise: CityBuildingBand
   industrial: CityBuildingBand & { stackChance: number; stackHeight: readonly [number, number] }
-  viaduct: { enabled: boolean; z: number; deckHeight: number; deckThickness: number; deckWidth: number; pierSpacing: number; pierSize: number }
-  streetLights: { enabled: boolean; z: number; spacing: number; height: number; armLength: number }
-  sky: { zenith: string; horizon: string; radius: number }
-  /** Daylight haze the scene fog blends to as the city appears. */
-  fog: { color: string; near: number; far: number }
-  /** Colour the yard/ground blends to in daylight. */
-  groundColor: string
-  colors: { glass: string; concrete: string; steel: string; industrial: string; roof: string; infrastructure: string }
+  colors: { glass: string; concrete: string; steel: string; industrial: string; roof: string }
 }
 
 /**
- * A straight two-way highway running along X: asphalt carriageway with a
- * procedural grain, dashed centre line, solid edge lines, shoulders and
- * verges, plus a paved access road joining its far side. All dimensions in
- * metres. Layers are separated by height (see Highway.tsx), all below the
- * contact-shadow plane so vehicle shadows fall onto them.
+ * A straight two-way highway along its slot's local X axis, centred on local
+ * z = 0: asphalt carriageway with a procedural grain, dashed centre line,
+ * solid edge lines, shoulders, verges and street lights on the far verge.
+ * Local −Z is the far side (towards the garage). All dimensions in metres.
  */
 export interface HighwayConfig {
   enabled: boolean
-  /** World Z of the road's centre line. */
-  centreZ: number
-  /** Length along X (fog hides the ends). */
+  slot: EnvironmentSlotConfig
+  /** Length along local X. */
   length: number
   lanes: number
   laneWidth: number
@@ -110,19 +156,28 @@ export interface HighwayConfig {
   colors: { asphalt: string; shoulder: string; verge: string; centreLine: string; edgeLine: string }
   /** Strength of the procedural asphalt grain, 0 (flat colour) to 1. */
   grain: number
-  /** Paved access road the scene lays under its departure path (the scene derives the outline). */
-  access: {
-    width: number
-    /** Minimum distance (m) the straight extends behind the trailer's rear. */
-    rearMargin: number
-    /** Run the straight on to the end of the highway (into the fog) instead of stopping behind the trailer. */
-    runToRoadEnd: boolean
-    /** Metres the access road tucks under the carriageway at the junction (hides the joint). */
-    overlap: number
-  }
+  /**
+   * Street lights on the far verge, arms reaching over the shoulder. None stand inside `exclude` (local X range):
+   * the stretch in front of the garage, where a pole would stand between the camera and the vehicles.
+   */
+  streetLights: { enabled: boolean; spacing: number; height: number; armLength: number; exclude: readonly [number, number]; color: string }
 }
 
-/** One stationary unit parked inside the garage. `x` is relative to the facade centre, `depth` is metres into the hall. */
+/** Paved exit road between the garage apron and the highway's far carriageway edge. */
+export interface AccessRoadConfig {
+  enabled: boolean
+  /** Its placeholder outline is derived in WORLD space from the departure path and mapped into this slot. */
+  slot: EnvironmentSlotConfig
+  /** Road width (m), centred on the puller's path; covers the trailer's swept path. */
+  width: number
+  /** Metres the road tucks under the apron edge and under the carriageway at either end (hides the joints). */
+  overlap: number
+  color: string
+  /** Strength of the procedural asphalt grain, 0 (flat colour) to 1. */
+  grain: number
+}
+
+/** One stationary unit parked inside the garage. `x` is slot-local, `depth` is metres into the hall. */
 export interface GarageFleetUnit {
   kind: 'puller' | 'trailer' | 'lowbed'
   x: number
@@ -131,7 +186,7 @@ export interface GarageFleetUnit {
   rotationY: number
 }
 
-/** A floor zone inside the hall: `position` = [x from facade centre, 0, depth into the hall], `size` = [width, length]. */
+/** A floor zone inside the hall: `position` = [slot-local x, 0, depth into the hall], `size` = [width, length]. */
 export interface GarageZone {
   kind: 'inspection' | 'pit'
   position: Vec3
@@ -139,39 +194,89 @@ export interface GarageZone {
 }
 
 /**
- * A long steel-framed heavy-haul assembly hall built from boxes: open service
- * bays with rolled-door housings between structural columns, closed sectional
- * doors in the end bays, corrugated cladding above, concrete slab, interior
- * column rows, roof trusses, ceiling luminaires, inspection zones and a parked
- * fleet. All dimensions in metres. The facade's front plane is at
- * `position[2]`; the hall extends towards −Z; `position[1]` is ignored (it
- * stands on the scene's ground plane).
+ * The company sign mounted on the garage's branding wall: a framed board on
+ * stand-off brackets, lettering drawn from `text`, and gooseneck lamps above.
+ * Slot-local: `centre` is on the facade plane (z = 0); the board stands
+ * `standoff` metres in front of it.
+ */
+export interface BrandSignConfig {
+  enabled: boolean
+  /** The exact company name. Rendered verbatim (no logo). */
+  text: string
+  /** [x along the facade, height above ground] of the board's centre, slot-local metres. */
+  centre: readonly [x: number, y: number]
+  width: number
+  height: number
+  /** Board thickness (m). */
+  depth: number
+  /** Gap between the wall and the back of the board (m). */
+  standoff: number
+  /** CSS font stack for the lettering; `var(--name)` reads a custom property from the document. */
+  fontFamily: string
+  fontWeight: number
+  /** Extra space between letters, as a fraction of the letter height. */
+  letterSpacing: number
+  colors: { face: string; text: string; border: string; frame: string; bracket: string; accent: string; lamp: string }
+  /** Gooseneck floodlights above the board. */
+  lamps: { count: number; intensity: number }
+}
+
+/**
+ * A bounded steel-framed heavy-haul hall built from boxes, in slot-local
+ * metres: the facade's front plane is local z = 0, the hall extends to −Z, its
+ * forecourt APRON to +Z. From `building.left` to `bays.start` the facade is a
+ * clean, full-height BRANDING WALL; then `bays.count` open service bays with
+ * rolled-door housings between structural columns; then a short pier to
+ * `building.right`. End walls, a parapet roofline, drive-through openings in
+ * the back wall (aligned with the front bays), interior column rows, roof
+ * trusses, luminaires, inspection zones and a parked fleet complete it.
  */
 export interface FleetGarageConfig {
   enabled: boolean
+  slot: EnvironmentSlotConfig
   /** Fraction (0–1) of the vehicles' approach phase at which the fade-in starts; it completes when they arrive. */
   fadeStartPortion: number
-  position: Vec3
-  width: number
-  depth: number
-  eavesHeight: number
-  bays: { count: number; pitch: number; openingHeight: number; openBays: readonly number[] }
+  building: { left: number; right: number; depth: number; eavesHeight: number; parapetHeight: number }
+  bays: {
+    /** Slot-local X where the first bay begins (the branding wall ends here). */
+    start: number
+    count: number
+    pitch: number
+    openingHeight: number
+    /** Drive-through openings in the back wall behind each bay (the city shows through them in daylight). */
+    rear: { open: boolean; height: number }
+  }
   columns: { size: number; interiorRows: readonly number[] }
   trusses: { spacing: number; topChordHeight: number; bottomChordHeight: number; diagonalPitch: number; purlinPitch: number }
   luminaires: { height: number; rowSpacing: number; spacing: number; length: number }
-  /** Spacing of the vertical corrugation ribs on the facade cladding. */
+  /** Spacing of the vertical corrugation ribs on the clad facade and end walls. */
   ribPitch: number
+  /** Horizontal panel joints on the branding wall (heights above ground, m). */
+  brandWallJoints: readonly number[]
+  /** Concrete forecourt in front of the facade, bounded by a kerb along its front edge. */
+  apron: {
+    /** Slot-local Z of the front edge (the kerb). */
+    front: number
+    left: number
+    right: number
+    color: string
+    /** Apron colour in full daylight. */
+    daylightColor: string
+    kerb: { width: number; height: number; color: string }
+  }
+  sign: BrandSignConfig
   zones: readonly GarageZone[]
   fleet: readonly GarageFleetUnit[]
   colors: {
     bollard: string
     frontColumn: string
     doorHead: string
-    closedDoor: string
     bayLight: string
     cladding: string
     rib: string
     fascia: string
+    brandWall: string
+    plinth: string
     fleetPaint: string
     fleetSteel: string
     interiorColumn: string

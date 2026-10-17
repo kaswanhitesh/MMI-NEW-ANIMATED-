@@ -37,7 +37,10 @@ src/three/                  Scene-agnostic 3D engine layer — nothing here know
   canvas/                   SceneCanvas (WebGL probe, DPR clamp, demand frameloop, context loss,
                             error boundary, DOM fallback) and RenderingConfig
   camera/                   useFramedCamera: responsive framing from a FramedCameraSpec
-  environment/              ProceduralEnvironment (RoomEnvironment PMREM), StageLighting, YardFloor
+  environment/              ProceduralEnvironment (RoomEnvironment PMREM), StageLighting, YardFloor,
+                            EnvironmentSlot (replaceable environment groups) and the procedural
+                            stand-ins: FleetGarage + BrandSign, AccessRoad, Highway, CityBackdrop;
+                            DaylightSky; slotSpace (world ↔ slot-local maths); roadSurface (layers)
 
 src/animation/              gsap.ts (single registration), useReducedMotion, scrollTimeline helpers
 
@@ -60,16 +63,16 @@ scroll position
 GSAP timeline (duration 1, labels per phase)       ← config.phases / easing
    │  initial → approach → couplingHold → establish → departure → highwayHold → city → cityHold
    │  approach: puller and trailer tween to their connected positions together; from 40% of it the
-   │            fleet garage fades 0 → 1, reaching 1 as they arrive
+   │            fleet garage fades 0 → 1, reaching 1 as they arrive — it never fades out afterwards
    │  couplingHold / establish: camera stage 0 → 1 → 2 (push-in, then wide pull-out); caption in, then out
-   │  departure: ONE scalar, departure.distance 0 → path length; garage 1 → 0 and highway 0 → 1 together
-   │             over its first 35%; camera stage 2 → 3 as the combination settles on the highway
+   │  departure: ONE scalar, departure.distance 0 → path length; camera stage 2 → 3 as the combination
+   │             settles on the highway; atmosphere.daylight 0 → 1 from departure.revealStart to its end
    │  city: city.travel 0 → journey.travel extends the same path along the highway; camera stage 3 → 4
-   │        (the city framing follows the combination); city.opacity 0 → 1 fades the skyline and haze in
+   │        (the city framing follows the combination, so the garage slides away behind it)
    │  tweens plain numbers on the rig
    ▼
-CouplingRig { puller, trailer, departure.distance, city.travel, city.opacity, camera.stage, garage,
-              highway, overlay.* }
+CouplingRig { puller, trailer, departure.distance, city.travel, atmosphere.daylight, camera.stage,
+              garage.opacity, overlay.* }
    │  read every frame (demand frameloop; the timeline calls invalidate())
    ▼
 PoseResolver (departurePath.ts): rig → CouplingPose { puller, trailer: x, z, yaw }
@@ -77,9 +80,10 @@ PoseResolver (departurePath.ts): rig → CouplingPose { puller, trailer: x, z, y
    │  path and the trailer's kingpin stays pinned to the fifth wheel while its rear tracks the path
    ▼
 R3F stage: vehicle groups copy the pose; useFramedCamera walks base → heroHold → wide → highway → city;
-           fog follows the framing, then the city haze; garage / highway / city / yard markings read
-           their opacities; the key light and contact shadows follow the combination;
-           overlay opacities are written to the DOM hero / caption elements
+           fog follows the framing, then blends to the daylight haze; the sky, apron and ground follow the
+           daylight; the garage (and its sign) read their opacity; the key light and contact shadows
+           follow the combination; overlay opacities are written to the DOM hero / caption elements
+           environment slots: garage · road · highway · city — fixed in the world, never animated
 ```
 
 The rig is the only bridge between the DOM world (GSAP) and the canvas world (three.js). The
@@ -151,14 +155,37 @@ Engine-layer pieces (`SceneCanvas`, `useFramedCamera`, `StageLighting`, `YardFlo
 - **Tone mapping and the horizon** — ACES tone mapping darkens dark colours, and the renderer's
   clear colour is not tone-mapped, so a fogged floor would show its far edge as a line. The floor
   and markings materials are therefore `toneMapped: false`; vehicles keep ACES.
-- **Fleet-garage backdrop** — `src/three/environment/FleetGarage.tsx` is a procedural heavy-haul
-  assembly hall (open service bays between steel columns, cladding, slab, interior column rows, roof
-  trusses, luminaires, inspection zones) drawn through one instanced mesh per material, plus a few
-  stationary fleet units that reuse the scene's own placeholder components. Its materials are
-  transparent with depth writes kept and explicit front-to-back render orders, and the stage writes
-  `rig.garage.opacity` into them (and into per-garage clones of the parked fleet's materials) every
-  rendered frame, so the same scrubbed timeline fades it in and out. It casts no shadows, which would
-  otherwise land at full strength before the building had appeared.
+- **Environment slots** — the garage, exit road, highway and city are independent environments,
+  each rendered by `EnvironmentSlot` as a group named `environment:<name>` at its configured world
+  transform (`environment.<name>.slot`). The procedural stand-in of each is authored in its slot's
+  local space, so moving or rotating a slot moves everything that belongs to it. `slot.bounds` is the
+  reserved box a replacement must fit (drawn as a wireframe with `environment.showSlotBounds`), and
+  `slot.model` swaps the stand-in for a GLB loaded through the same validated loader as the vehicles:
+  while it loads, or if the file is missing or invalid, the stand-in shows and a development warning
+  is logged once. Attachments passed as slot children — the garage's wall sign — stay in the slot
+  whichever geometry represents it. Geometry the scene derives in world space (the exit road follows
+  the vehicle's path; the kerb and edge-line gaps follow the road) is mapped into each slot's frame
+  with `slotSpace.ts`, so it stays aligned when a slot moves.
+- **The garage** — `FleetGarage.tsx` is a bounded steel-framed hall: a clean branding wall, five open
+  service bays, end walls, a parapet roofline, drive-through openings in the back wall, interior
+  columns, trusses, luminaires, inspection zones, a few parked fleet units (the scene's own vehicle
+  placeholders), and a concrete forecourt apron bounded by a kerb that breaks only where the exit
+  road leaves. Static parts are one instanced mesh per material. Its materials are transparent with
+  depth writes kept and explicit front-to-back render orders, and `rig.garage.opacity` is written to
+  them (and to per-garage clones of the parked fleet's materials) every rendered frame: it fades in
+  during the approach and then stays solid. It casts no shadows; the apron receives the vehicles'.
+- **The wall sign** — `BrandSign.tsx` mounts a framed board on stand-off brackets with gooseneck
+  lamps on the branding wall, lettered with the exact company name from `garage.sign.text` (drawn
+  once into a canvas texture in the site's font stack, auto-fitted and evenly tracked; no logo). It
+  is placed so that, with the level cameras, it is fully in frame in the establishing shot, through
+  the U-turn and at the highway hold on screens of aspect ≥ 1.7, and out of the coupling shots.
+- **Leaving the garage** — nothing in the environment moves or fades during the journey. The vehicle
+  drives off the apron and along the highway, and the camera follows it, so the garage recedes behind
+  it with true perspective and parallax (and slides out of frame during the city travel); scrolling
+  back simply returns the camera and the vehicle. The city is opaque and always present: in the
+  enclosed-yard atmosphere the short, dark fog swallows it, and as `atmosphere.daylight` comes up
+  (sky dome, longer and lighter haze, daylight ground tone) it emerges in the distance — through the
+  garage's drive-through openings and beyond the building's end — and the travel reveals the rest.
 - **Fog per framing** — the responsive camera backs off far on phones and in the wide framings;
   `stage/fogDepths.ts` pushes the fog band out past the framed subject for every framing and the stage
   blends the depths with the camera stage, so the vehicles never fog out.
@@ -177,21 +204,21 @@ Engine-layer pieces (`SceneCanvas`, `useFramedCamera`, `StageLighting`, `YardFlo
   combination keeps driving along the final straight and the road, its markings and the street lights
   pass under it at the true speed, with no looping or texture scrolling. The `city` framing has
   `follow: 1`, so the camera translates with the combination and it stays anchored bottom-left. The
-  backdrop (`src/three/environment/CityBackdrop.tsx`) is procedural: seeded rows of skyline towers,
-  mid-rise blocks and industrial sheds far behind the road, one instanced mesh per material, with
-  per-instance tone variation, plus street lights along the far verge and a camera-following gradient
-  sky sphere. It is long enough to cover the whole travel, so no edge or seam comes into view. Its
-  opacity, the daylight haze (fog colour and depths) and the ground colour blend in with `city.opacity`.
-- **Highway and ground layers** — `src/three/environment/Highway.tsx` lays a two-way road with a
-  generated grain texture (mipmapped, anisotropic), markings, shoulders and verges, plus the paved
-  access road the scene derives from the departure path (`describeAccessRoad`). The access road runs to
-  the end of the yard and is drawn above the far shoulder and verge, which stay continuous; only the
-  far edge line is broken at the junction. Layers are separated by height so nothing coplanar can
-  z-fight: floor (pushed back with a polygon offset), yard markings 4 mm, highway surfaces 7 mm,
-  access road 11 mm, paint 15 mm, contact shadows 20 mm.
+  city stand-in (`CityBackdrop.tsx`) is deliberately simple: seeded rows of industrial sheds, mid-rise
+  blocks and skyline towers behind the garage, one instanced mesh per material with per-instance tone
+  variation. Its span covers the widest view (32:9) over the departure and the whole travel, so no
+  edge comes into view. The sky (`DaylightSky.tsx`) is a camera-following gradient dome.
+- **Road, highway and ground layers** — `AccessRoad.tsx` paves the exit road: the U-turn's band,
+  10.5 m wide around the path, clipped at the apron kerb and at the far carriageway edge
+  (`describeExitRoad`). `Highway.tsx` lays a two-way road with a generated grain texture (mipmapped,
+  anisotropic), markings, shoulders, verges and street lights (none in front of the garage, where a
+  pole would stand between the camera and the coupling). Both are opaque and permanent. Layers are
+  separated by height so nothing coplanar can z-fight (`roadSurface.ts`): floor (pushed back with a
+  polygon offset), apron 2 mm, yard markings 4 mm, highway surfaces 7 mm, exit road 11 mm, paint
+  15 mm, contact shadows 20 mm.
 - **Reduced motion** — `gsap.matchMedia` renders a completed composition statically with all copy
-  visible; no pin, no scrub. `reducedMotion.frame` picks it: `'highway'` (the default, combination on
-  the right) or `'city'`. The default is the highway frame because the caption sits bottom-left, which
+  visible; no pin, no scrub. `reducedMotion.frame` picks it: `'highway'` (the default: combination on
+  the right, the garage and its sign behind it in daylight) or `'city'`. The default is the highway frame because the caption sits bottom-left, which
   is where the city composition puts the vehicle. CSS transitions are also disabled under the same media query.
 - **No WebGL** — `SceneCanvas` probes first and renders a same-size text fallback; a runtime
   renderer failure hits the canvas error boundary and shows the same fallback.

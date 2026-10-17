@@ -7,7 +7,9 @@
  */
 import { MODEL_MANIFEST } from '../../three/assets/modelManifest'
 import type { ModelManifestEntry, Vec3 } from '../../three/assets/types'
+import { worldToSlot } from '../../three/environment/slotSpace'
 import { SCENE_01_CONFIG, SCENE_01_PHASE_ORDER, type Scene01Config } from './config'
+import { describeExitRoad } from './departurePath'
 
 export interface AssemblyLayout {
   couplingPoint: Vec3
@@ -110,19 +112,52 @@ export function validateScene01Config(config: Scene01Config = SCENE_01_CONFIG, m
   const dep = config.departure
   if (!(dep.straightOut >= 0 && dep.turnRadius > 0 && dep.straightIn >= 0)) warnings.push('departure distances must be ≥ 0 and the turn radius > 0.')
   if (!(dep.trailerTrackingLength > 0)) warnings.push('departure.trailerTrackingLength must be > 0.')
-  if (!(dep.crossfadePortion > 0 && dep.crossfadePortion <= 1)) warnings.push('departure.crossfadePortion must be in (0, 1].')
+  if (!(dep.revealStart >= 0 && dep.revealStart < 1)) warnings.push('departure.revealStart must be in [0, 1).')
   if (!(dep.cameraSettleStart >= 0 && dep.cameraSettleStart < 1)) warnings.push('departure.cameraSettleStart must be in [0, 1).')
   if (config.camera.sequence.length < 2) warnings.push('camera.sequence must list at least two framings.')
   const j = config.journey
   if (!(j.travel >= 0)) warnings.push('journey.travel must be ≥ 0.')
-  if (!(j.cameraPortion > 0 && j.cameraPortion <= 1) || !(j.fadePortion > 0 && j.fadePortion <= 1)) warnings.push('journey.cameraPortion and journey.fadePortion must be in (0, 1].')
+  if (!(j.cameraPortion > 0 && j.cameraPortion <= 1)) warnings.push('journey.cameraPortion must be in (0, 1].')
   if (config.camera.sequence.indexOf('highway') < 0 || config.camera.sequence.indexOf('city') !== config.camera.sequence.indexOf('highway') + 1) warnings.push("camera.sequence must contain 'highway' followed by 'city' (the timeline tweens the stage 3 → 4).")
   // Level side views: a framing with a sideways direction component tilts every line along the travel axis.
   for (const name of config.camera.sequence) {
     if (Math.abs(config.camera.framings[name].direction[0]) > 1e-9) warnings.push(`camera.framings.${name}.direction[0] should be 0 for a level side view (lines along X would slant).`)
   }
-  const cityFar = config.environment.city.sky.radius
-  if (config.environment.city.enabled && config.camera.far <= cityFar) warnings.push(`camera.far (${config.camera.far}) must exceed the city sky radius (${cityFar}).`)
+  const skyRadius = config.environment.atmosphere.sky.radius
+  if (config.camera.far <= skyRadius) warnings.push(`camera.far (${config.camera.far}) must exceed the sky radius (${skyRadius}).`)
+
+  // 5b. Environment slots and the garage stand-in must be self-consistent.
+  const env = config.environment
+  for (const [name, slot] of [['garage', env.garage.slot], ['road', env.road.slot], ['highway', env.highway.slot], ['city', env.city.slot]] as const) {
+    if (slot.bounds.min.some((v, i) => !(v < slot.bounds.max[i]))) warnings.push(`environment.${name}.slot.bounds: every min must be below its max.`)
+  }
+  const g = env.garage
+  const bayEnd = g.bays.start + g.bays.count * g.bays.pitch
+  if (!(g.building.left < g.bays.start && bayEnd <= g.building.right)) warnings.push('environment.garage: the bays must lie between building.left and building.right, with the branding wall to their left.')
+  const sign = g.sign
+  if (sign.enabled) {
+    const half = sign.width / 2
+    const bayColumnEdge = g.bays.start - g.columns.size / 2
+    if (sign.centre[0] - half < g.building.left + 0.5 || sign.centre[0] + half > bayColumnEdge - 0.5) {
+      warnings.push('environment.garage.sign must sit on the branding wall, clear of the building corner and the first bay column.')
+    }
+    if (sign.centre[1] - sign.height / 2 < 1.5 || sign.centre[1] + sign.height / 2 > g.building.eavesHeight - 1.2) {
+      warnings.push('environment.garage.sign must sit between the plinth and the fascia band.')
+    }
+    if (sign.text.trim().length === 0) warnings.push('environment.garage.sign.text is empty.')
+  }
+  // The coupling must happen on the apron, and the exit road must actually connect the apron to the highway.
+  if (g.enabled) {
+    for (const [label, p] of [['pullerStart', layout.pullerStart], ['trailerStart', layout.trailerStart], ['pullerFinal', layout.pullerFinal], ['trailerFinal', layout.trailerFinal]] as const) {
+      const [lx, lz] = worldToSlot(g.slot, [p[0], p[2]])
+      if (lx < g.apron.left || lx > g.apron.right || lz < 0 || lz > g.apron.front) warnings.push(`${label} is not on the garage apron (garage-local x ${lx.toFixed(1)}, z ${lz.toFixed(1)}).`)
+    }
+  }
+  if (env.road.enabled) {
+    const hw = env.highway
+    const exit = describeExitRoad(layout.pullerFinal, dep, env.road.width, env.road.overlap, { slot: g.slot, apronFront: g.apron.front, kerbWidth: g.apron.kerb.width }, { slot: hw.slot, carriagewayHalfWidth: (hw.lanes * hw.laneWidth) / 2 })
+    if (exit.outline.length < 3 || !exit.kerbGap || !exit.junction) warnings.push('environment.road: the exit road does not connect the apron kerb to the highway — check the slots and departure geometry.')
+  }
 
   // 6. Entrances must actually travel in the documented directions.
   if (layout.pullerStart[0] >= layout.pullerFinal[0]) warnings.push('pullerStart must be at −X of the puller final position (it enters from the left).')

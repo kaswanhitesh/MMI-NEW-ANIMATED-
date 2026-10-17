@@ -1,7 +1,8 @@
 # Checklist: replacing the placeholders with the final 3D models
 
-The animation timeline, camera and page layout never need to change for a model swap. Only the
-files in `public/models/` and the entries in `src/three/assets/modelManifest.ts` are involved.
+The animation timeline, camera and page layout never need to change for a model swap. For the
+vehicles, only the files in `public/models/` and the entries in `src/three/assets/modelManifest.ts`
+are involved. For the environments (garage, exit road, highway, city), see section 7.
 
 ## 1. Receive and inspect the files
 
@@ -65,7 +66,8 @@ In `src/scenes/scene-01-coupling/config.ts`:
       centre of its axle group once the real trailer is in. Keep the coupling anchors accurate: the
       departure pins the trailer's kingpin to the puller's fifth wheel through the turn.
 - [ ] `journey.travel` sets how far the combination drives during the city phase;
-      `environment.city` sets the skyline layout, palette, haze and street lights.
+      `environment.atmosphere` sets the daylight sky, haze and ground tone, and `departure.revealStart`
+      when the daylight starts to come up.
 - [ ] `scroll.distanceVh` and `scroll.scrub` set how long and how smooth the scrub feels.
 - [ ] `lighting.*` and `environment.*` for the look. `lighting.key.shadowExtent` must cover the
       full combination.
@@ -75,11 +77,46 @@ In `src/scenes/scene-01-coupling/config.ts`:
 - [ ] `npm run build` passes (`tsc -b` + Vite).
 - [ ] Scroll forward and backward through the whole section on desktop and on a phone-sized
       viewport: both vehicles travel together from left and right, couple, the camera pulls out, the
-      combination U-turns onto the highway and holds on the right, then drives on as the city fades in
-      and holds low on the left; scrolling up reverses all of it.
+      combination U-turns off the garage apron onto the highway and holds on the right with the garage
+      (and its sign) behind it, then drives on as the garage slides away and the city opens up, and
+      holds low on the left; scrolling up reverses all of it.
 - [ ] Enable "reduce motion" in the OS and reload: the finished combination is shown statically
-      on the highway (or in the city, with `reducedMotion.frame: 'city'`) with the copy visible.
+      on the highway with the garage behind it (or in the city, with `reducedMotion.frame: 'city'`)
+      with the copy visible.
 - [ ] Temporarily rename one `.glb` to confirm the placeholder fallback still works — the site must
       stay usable without any model.
 - [ ] Remove `placeholders.showBadge` only if you want to hide the badge in production; it never
       shows when both models load.
+
+## 7. Replacing an environment (garage, exit road, highway, city)
+
+Each environment is a slot in `src/scenes/scene-01-coupling/config.ts` (`environment.garage.slot`,
+`environment.road.slot`, `environment.highway.slot`, `environment.city.slot`). The procedural
+stand-ins only establish the spatial relationships; replace them one at a time.
+
+- [ ] Author the model in the slot's LOCAL frame, in metres, Y up (see the table in
+      `docs/COORDINATE-SYSTEM.md`): for the garage the facade's front plane is local z = 0, the hall
+      runs to −Z and the forecourt to +Z, and the coupling area (world z ≈ 0, i.e. local z ≈ 26) must
+      be clear, level ground. Keep it inside `slot.bounds` (set `environment.showSlotBounds: true`
+      to see the boxes in the dev build).
+- [ ] Put the file under `public/models/environment/` and set, for example:
+
+      model: { url: `${import.meta.env.BASE_URL}models/environment/garage.glb`, scale: 1,
+               position: [0, 0, 0], rotation: [0, 0, 0], castShadow: false, receiveShadow: true }
+
+      `scale`, `position` and `rotation` correct the export inside the slot; `slot.position` /
+      `slot.rotationY` move the whole environment (stand-in, model and attachments together).
+- [ ] While the file loads, or if it is missing or invalid, the stand-in is shown and the dev
+      console logs one `[environment] <name>: …` warning — nothing breaks.
+- [ ] Garage: the model fades in with the approach exactly like the stand-in (its materials are
+      cloned and faded). The MEGA MOVE INDIA sign is an attachment of the slot and stays: leave its
+      wall area clean (local x −42.6 … −32.0, y 7.9 … 10.5 on the facade plane), move it with
+      `garage.sign.centre`, or set `garage.sign.enabled: false` if the model carries its own sign.
+      The kerb gap and apron belong to the stand-in; the model must provide its own forecourt edge
+      with an opening where the exit road leaves (world x ≈ −35 … −24.5 at z 16).
+- [ ] Exit road: its stand-in follows the vehicle's path; a modelled road must cover the same band
+      (`docs/COORDINATE-SYSTEM.md`) or the trailer's swept path will leave the paving.
+- [ ] Highway and city: keep the highway's far lane centre at world z 28 (the vehicle's path) and the
+      city entirely behind the garage (world z < −70) so nothing stands between the camera and the
+      vehicle. The city must cover world x −1200 … 1500 (the widest view over the whole journey).
+- [ ] Re-run the checks in section 6.

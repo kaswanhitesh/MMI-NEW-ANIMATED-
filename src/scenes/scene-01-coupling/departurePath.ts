@@ -22,7 +22,11 @@
  * articulation angle and no interpenetration.
  */
 import type { Vec3 } from '../../three/assets/types'
+import { clipPolygon, crossingRange, worldToSlot } from '../../three/environment/slotSpace'
+import type { EnvironmentSlotConfig } from '../../three/environment/types'
 import type { Scene01Config } from './config'
+
+type SlotPlacement = Pick<EnvironmentSlotConfig, 'position' | 'rotationY'>
 import type { CouplingPose, CouplingRig } from './rig'
 
 export interface PathPoint {
@@ -159,70 +163,62 @@ export function articulationAngle(pose: CouplingPose): number {
   return d
 }
 
-/** Outline of the paved access road under the departure, plus the gap it needs in the highway's far verge. */
-export interface AccessRoadOutline {
-  /** Closed polygon in world XZ (metres), counter-clockwise or clockwise; consumers triangulate it. */
-  outline: Array<readonly [x: number, z: number]>
-  /** X range where the access road meets the highway: the far verge, shoulder and edge line are broken here. Null if it never reaches. */
-  junction: readonly [x0: number, x1: number] | null
+/** The exit road under the departure U-turn, clipped to run from the garage apron's kerb to the highway. */
+export interface ExitRoadOutline {
+  /** Closed polygon in WORLD XZ (metres); empty if the clips leave nothing. */
+  outline: Array<[x: number, z: number]>
+  /** Garage-local X range where the road crosses the apron kerb line (the kerb is broken there), or null. */
+  kerbGap: [x0: number, x1: number] | null
+  /** Highway-local X range where the road meets the far carriageway edge (its edge line is broken there), or null. */
+  junction: [x0: number, x1: number] | null
 }
 
 /**
- * Describes the paved access road the combination drives on during the
- * departure: a straight along the yard (under the parked combination) that
- * turns into a half-ring following the U-turn and ends flush with the
- * highway's far carriageway edge. Pure; the stage passes it to the highway.
- *
- * @param start       puller coupling position (path start)
- * @param width       road width (m), centred on the path
- * @param rearX       world X where the straight begins (behind the trailer's rear)
- * @param joinZ       world Z of the highway carriageway edge the road joins
- * @param overlap     metres the road tucks under the carriageway (hides the joint)
+ * Paved band under the U-turn in WORLD XZ: the ring between radii
+ * `turnRadius ± width / 2` around the turn centre, from the start of the turn
+ * (φ = 0) to its end (φ = π), closed by radial caps. Pure.
  */
-export function describeAccessRoad(
+export function describeTurnBand(start: Vec3, cfg: Scene01Config['departure'], width: number, arcSegments = 64): Array<[number, number]> {
+  const cx = start[0] - cfg.straightOut
+  const cz = start[2] + cfg.turnRadius
+  const rO = cfg.turnRadius + width / 2
+  const rI = Math.max(0.5, cfg.turnRadius - width / 2)
+  // Polar point on the turn: φ = 0 at the start of the turn, π at its end (see createDeparturePath).
+  const polar = (r: number, phi: number): [number, number] => [cx - r * Math.sin(phi), cz - r * Math.cos(phi)]
+  const outline: Array<[number, number]> = []
+  for (let i = 0; i <= arcSegments; i++) outline.push(polar(rO, (Math.PI * i) / arcSegments))
+  for (let i = arcSegments; i >= 0; i--) outline.push(polar(rI, (Math.PI * i) / arcSegments))
+  return outline
+}
+
+/**
+ * Describes the exit road the combination drives on from the garage apron to
+ * the highway: the U-turn's paved band, clipped where it leaves the apron
+ * (garage-local z ≥ apron front − overlap, so it tucks under the kerb line) and
+ * where it meets the carriageway (highway-local z ≤ far edge + overlap). The
+ * clips are evaluated in each slot's own frame, so moving or rotating the
+ * garage or highway keeps the road joined to both. Pure.
+ *
+ * @param garage   the garage slot placement and its apron's front edge / kerb width (slot-local)
+ * @param highway  the highway slot placement and its carriageway half-width
+ */
+export function describeExitRoad(
   start: Vec3,
   cfg: Scene01Config['departure'],
   width: number,
-  rearX: number,
-  joinZ: number,
   overlap: number,
-  arcSegments = 48,
-): AccessRoadOutline {
-  const x0 = start[0]
-  const z0 = start[2]
-  const cx = x0 - cfg.straightOut
-  const cz = z0 + cfg.turnRadius
-  const rO = cfg.turnRadius + width / 2
-  const rI = Math.max(0.5, cfg.turnRadius - width / 2)
-  const zCut = joinZ + overlap
-
-  // Polar point on the turn: phi = 0 at the start of the turn, π at its end (see createDeparturePath).
-  const polar = (r: number, phi: number): readonly [number, number] => [cx - r * Math.sin(phi), cz - r * Math.cos(phi)]
-  const cutAngle = (r: number): number => (cz + r > zCut ? Math.acos(Math.max(-1, Math.min(1, (cz - zCut) / r))) : Math.PI)
-
-  const phiO = cutAngle(rO)
-  const phiI = cutAngle(rI)
-  const outline: Array<readonly [number, number]> = []
-
-  // Outer edge: straight along the yard, then the outer arc up to the carriageway.
-  outline.push([rearX, z0 - width / 2])
-  for (let i = 0; i <= arcSegments; i++) outline.push(polar(rO, (phiO * i) / arcSegments))
-  if (phiO < Math.PI) {
-    // Along the carriageway edge back towards the end of the turn.
-    if (phiI < Math.PI) {
-      outline.push(polar(rI, phiI))
-    } else {
-      outline.push([cx, zCut])
-      outline.push(polar(rI, Math.PI))
-    }
-  } else {
-    outline.push(polar(rI, Math.PI))
-  }
-  // Inner edge: the inner arc back to the start of the turn, then the straight's inner side.
-  const innerEnd = Math.min(phiI, Math.PI)
-  for (let i = arcSegments; i >= 0; i--) outline.push(polar(rI, (innerEnd * i) / arcSegments))
-  outline.push([rearX, z0 + width / 2])
-
-  const junction: readonly [number, number] | null = phiO < Math.PI ? [polar(rO, phiO)[0], phiI < Math.PI ? polar(rI, phiI)[0] : cx] : null
-  return { outline, junction }
+  garage: { slot: SlotPlacement; apronFront: number; kerbWidth: number },
+  highway: { slot: SlotPlacement; carriagewayHalfWidth: number },
+): ExitRoadOutline {
+  const band = describeTurnBand(start, cfg, width)
+  const offApron = clipPolygon(band, (p) => worldToSlot(garage.slot, p)[1] - (garage.apronFront - overlap))
+  const outline = clipPolygon(offApron, (p) => -highway.carriagewayHalfWidth + overlap - worldToSlot(highway.slot, p)[1])
+  if (outline.length < 3) return { outline: [], kerbGap: null, junction: null }
+  // The road begins `overlap` inside the kerb line: break the kerb across the road's widest extent over that depth.
+  const atFront = crossingRange(outline, garage.slot, garage.apronFront)
+  const atBack = crossingRange(outline, garage.slot, garage.apronFront - Math.min(garage.kerbWidth, overlap) + 1e-4)
+  const kerbGap: [number, number] | null =
+    atFront || atBack ? [Math.min(atFront?.[0] ?? Infinity, atBack?.[0] ?? Infinity), Math.max(atFront?.[1] ?? -Infinity, atBack?.[1] ?? -Infinity)] : null
+  const junction = crossingRange(outline, highway.slot, -highway.carriagewayHalfWidth)
+  return { outline, kerbGap, junction }
 }

@@ -31,7 +31,7 @@ export interface YardFloorProps {
 const STRIPE_WIDTH = 0.12
 /** Markings float this far above the floor so they are not z-fought by it. */
 const MARKING_LIFT = 0.004
-/** Contact shadows sit above every ground layer (markings 4 mm, road surfaces ≤ 12 mm) so shadows fall on all of them. */
+/** Contact shadows sit above every ground layer (apron 2 mm … road paint 15 mm, see roadSurface.ts) so shadows fall on all of them. */
 const CONTACT_SHADOW_LIFT = 0.02
 
 const ORIGIN: Vec3 = [0, 0, 0]

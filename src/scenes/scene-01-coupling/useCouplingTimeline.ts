@@ -13,10 +13,14 @@
  * phase windows from the config are placed at absolute positions and exposed as
  * labels (`initial`, `approach`, `couplingHold`, `establish`, `departure`,
  * `highwayHold`, `city`, `cityHold`, `end`). Both vehicles travel during `approach` on the same
- * window with the same ease; after the coupling hold and the establishing
- * pull-out, ONE scalar (`rig.departure.distance`) drives the U-turn and the
- * garage → highway crossfade; in the city phase `rig.city.travel` continues
- * the drive while the camera travels with it and the city fades in. All tuning numbers come from the scene config.
+ * window with the same ease while the garage fades in; after the coupling hold
+ * and the establishing pull-out, ONE scalar (`rig.departure.distance`) drives
+ * the U-turn off the apron onto the highway while the daylight replaces the
+ * enclosed-yard atmosphere; in the city phase `rig.city.travel` continues the
+ * drive while the camera travels with it. The garage, road, highway and city
+ * are fixed in the world and never fade during the journey: the camera
+ * following the vehicle is what moves them past. All tuning numbers come from
+ * the scene config.
  */
 import { invalidate } from '@react-three/fiber'
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
@@ -146,8 +150,9 @@ function populateTimeline(tl: gsap.core.Timeline, rig: CouplingRig, layout: Asse
   // The hero copy fades out early in the approach.
   tl.to(rig.overlay, { heroOpacity: 0, duration: len(A) * overlay.heroFadeOutPortion, ease: easing.overlay }, A.start)
 
-  // Fleet-garage backdrop: starts fading in part-way through the approach and is fully visible exactly when the
-  // vehicles arrive, on the same scrubbed timeline, so scrolling back up fades it out with their retreat.
+  // Fleet garage: starts fading in part-way through the approach and is fully visible exactly when the vehicles
+  // arrive, on the same scrubbed timeline, so scrolling back up fades it out with their retreat. It never fades out
+  // on the way forward.
   const garage = config.environment.garage
   if (garage.enabled) {
     const fadeStart = A.start + len(A) * garage.fadeStartPortion
@@ -167,27 +172,25 @@ function populateTimeline(tl: gsap.core.Timeline, rig: CouplingRig, layout: Asse
   tl.to(rig.overlay, { captionOpacity: 0, duration: len(ES) * overlay.captionFadeOutPortion, ease: easing.overlay }, ES.start)
 
   // Departure: ONE scalar — distance along the path — drives both vehicles (see departurePath.ts), with a slow
-  // start and stop. The garage fades out and the highway fades in together at the start of the move, and the camera
-  // settles from the wide framing onto the right-aligned highway composition (stage 2 → 3) as the vehicle arrives.
+  // start and stop. The garage stays fully visible and fixed in the world; the camera follows the combination off the
+  // apron and settles on the right-aligned highway composition (stage 2 → 3), so the garage recedes behind it. From
+  // `revealStart` the daylight replaces the enclosed-yard atmosphere, completing as the vehicle arrives: the city
+  // emerges from the haze through the garage's drive-through openings and beyond its end.
   tl.to(rig.departure, { distance: path.totalLength, duration: len(DP), ease: easing.departure }, DP.start)
-  const crossfade = Math.max(1e-4, len(DP) * departure.crossfadePortion)
-  if (garage.enabled) tl.to(rig.garage, { opacity: 0, duration: crossfade, ease: easing.crossfade }, DP.start)
-  if (config.environment.highway.enabled) tl.to(rig.highway, { opacity: 1, duration: crossfade, ease: easing.crossfade }, DP.start)
+  const revealStart = DP.start + len(DP) * departure.revealStart
+  tl.to(rig.atmosphere, { daylight: 1, duration: Math.max(1e-4, DP.end - revealStart), ease: easing.daylight }, revealStart)
   const settleStart = DP.start + len(DP) * departure.cameraSettleStart
   tl.to(rig.camera, { stage: 3, duration: Math.max(1e-4, DP.end - settleStart), ease: easing.cameraSettle }, settleStart)
 
   // Highway hold: nothing moves.
 
-  // City journey: the combination drives on along the highway (travel), the camera re-frames to the bottom-left
-  // city composition and travels with it (stage 3 → 4, follow 1), and the city, sky and daylight haze fade in.
-  // Everything is a function of scroll, so scrolling up restores the highway hold exactly.
+  // City journey: the combination drives on along the highway (travel) and the camera re-frames to the bottom-left
+  // city composition and travels with it (stage 3 → 4, follow 1): the garage slides away behind and the city passes
+  // with true parallax. Everything is a function of scroll, so scrolling up restores the highway hold exactly.
   const CI = phases.city
   const { journey } = config
   tl.to(rig.city, { travel: journey.travel, duration: len(CI), ease: easing.cityTravel }, CI.start)
   tl.to(rig.camera, { stage: 4, duration: Math.max(1e-4, len(CI) * journey.cameraPortion), ease: easing.cityCamera }, CI.start)
-  if (config.environment.city.enabled) {
-    tl.to(rig.city, { opacity: 1, duration: Math.max(1e-4, len(CI) * journey.fadePortion), ease: easing.cityFade }, CI.start)
-  }
 
   // City hold: nothing moves.
 }
@@ -233,7 +236,7 @@ export function useCouplingTimeline(options: UseCouplingTimelineOptions): Coupli
       const finalState = {
         cameraStage: config.camera.sequence.indexOf(cityFrame ? 'city' : 'highway'),
         departureDistance: createDeparturePath(layout.pullerFinal, config.departure).totalLength,
-        cityOpacity: cityFrame && config.environment.city.enabled ? 1 : 0,
+        daylight: 1,
         cityTravel: cityFrame ? config.journey.travel : 0,
       }
       const state = showFinal ? createFinalRig(layout, finalState) : createInitialRig(layout)

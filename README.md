@@ -16,12 +16,16 @@ npm run dev          # http://localhost:5173
 ```
 
 Scroll down through the first screen: the puller enters from the left and the trailer from the right
-at the same time and they couple as MMI's fleet garage appears behind them. The camera then pulls
-out, and the coupled combination drives off, makes a broad left U-turn while the garage gives way to
-a highway, and settles on the right of the frame with the left side left clear. Scrolling on, the
-camera moves with the combination as it drives along the highway, an Indian city-edge skyline fades
-in behind the road, and the shot ends with the combination low on the left and the right side clear.
-Every shot is a level side view. Scroll up and every step reverses.
+at the same time and they couple on the forecourt of MMI's fleet garage as the building appears
+behind them. The camera then pulls out to show the whole facility, with the MEGA MOVE INDIA sign on
+its branding wall and the highway in front. The coupled combination drives off the apron, makes a
+broad left U-turn onto the highway and settles on the right of the frame with the left side clear.
+The garage stays where it is; as the camera follows the vehicle it recedes behind it, while daylight
+replaces the enclosed-yard atmosphere and an Indian city edge emerges through the garage's
+drive-through openings and beyond the end of the building. Scrolling on, the combination drives
+along the highway, the garage slides away behind it, and the shot ends with the combination low on
+the left and the right side clear. Every shot is a level side view. Scroll up and every step
+reverses.
 
 Other scripts:
 
@@ -48,6 +52,12 @@ all that is needed to switch to the real models; see
 [`public/models/README.md`](public/models/README.md) and
 [`docs/MODEL-REPLACEMENT-CHECKLIST.md`](docs/MODEL-REPLACEMENT-CHECKLIST.md).
 
+The environments — **garage, exit road, highway and city** — are temporary procedural stand-ins
+too. Each lives in its own replaceable slot (`environment:<name>` in the scene graph) with a
+configurable world transform and reserved bounds; setting `environment.<name>.slot.model` in
+`src/scenes/scene-01-coupling/config.ts` swaps the stand-in for a detailed GLB without touching
+the vehicle rig or the scroll timeline (see the checklist, section 7).
+
 ## Where things live
 
 ```
@@ -61,7 +71,8 @@ src/
     placeholders/       TEMPORARY procedural stand-ins for the vehicles
     canvas/             SceneCanvas (DPR clamp, demand rendering, WebGL detection + fallback)
     camera/             responsive camera framing
-    environment/        procedural environment, lighting rig, yard floor
+    environment/        lighting rig, yard floor, environment slots and their procedural stand-ins
+                        (garage + wall sign, exit road, highway, city), daylight sky
   animation/            GSAP registration, reduced-motion hook, pinned scrub timeline helper
   scenes/
     types.ts            scene module / lifecycle contracts

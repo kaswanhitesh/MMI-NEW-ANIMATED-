@@ -12,6 +12,12 @@ Until a file exists — or if it is not a valid GLB — the scene renders a clea
 **temporary placeholder** built from procedural geometry. The placeholder is a layout stand-in
 only; it is not a representation of any real vehicle.
 
+Environment models (garage, exit road, highway, city) are optional and go in
+`public/models/environment/`. They are NOT looked up automatically: each one is switched on by
+setting its slot's `model` in `src/scenes/scene-01-coupling/config.ts` (e.g.
+`environment.garage.slot.model`), so no request is made for a file that does not exist yet. See
+`docs/MODEL-REPLACEMENT-CHECKLIST.md`, section 7.
+
 ## Requirements for the delivered files
 
 - Format: binary glTF 2.0 (`.glb`), single file, textures embedded. Draco / meshopt compression is

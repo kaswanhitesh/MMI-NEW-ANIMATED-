@@ -81,8 +81,12 @@ export interface Scene01Config {
     straightIn: number
     /** Distance (m) from the trailer's kingpin back to its rear reference point (axle-group centre), used for tracking. */
     trailerTrackingLength: number
-    /** Fraction of the departure phase over which the garage fades out and the highway fades in. */
-    crossfadePortion: number
+    /**
+     * Fraction of the departure phase at which the daylight starts to replace the enclosed-yard atmosphere (sky, haze,
+     * ground tone); it completes as the combination arrives on the highway. The city emerges from the haze — through
+     * the garage's drive-through openings and beyond the building's end — and nothing is crossfaded.
+     */
+    revealStart: number
     /** Fraction of the departure phase at which the camera starts settling from `wide` to `highway` (≈ the turn exit). */
     cameraSettleStart: number
   }
@@ -92,12 +96,10 @@ export interface Scene01Config {
     travel: number
     /** Fraction of the city phase over which the camera re-frames from `highway` to `city`. */
     cameraPortion: number
-    /** Fraction of the city phase over which the city, sky and daylight haze fade in. */
-    fadePortion: number
   }
   /** Stage lighting. Light positions are ABSOLUTE world positions in metres, not relative to the vehicles. */
   lighting: StageLightingConfig
-  /** Background/fog colour, yard floor, markings and contact shadow. */
+  /** Background/fog, yard floor, markings, contact shadow, atmosphere and the replaceable environment slots. */
   environment: YardEnvironmentConfig
   scroll: {
     /** Pinned scroll distance as a multiple of the viewport height (3.2 = 320vh). */
@@ -123,12 +125,10 @@ export interface Scene01Config {
     establish: string
     /** Ease of the departure travel (slow start, slow stop: heavy vehicle). */
     departure: string
-    /** Ease of the garage → highway crossfade. */
-    crossfade: string
+    /** Ease of the daylight reveal (enclosed-yard atmosphere → open daylight haze and sky). */
+    daylight: string
     /** Ease of the final camera settle onto the highway composition. */
     cameraSettle: string
-    /** Ease of the city / sky / haze fade-in. */
-    cityFade: string
     /** Ease of the travel along the highway (gentle start from the highway hold, gentle stop into the final hold). */
     cityTravel: string
     /** Ease of the camera re-framing onto the bottom-left city composition. */
@@ -239,14 +239,13 @@ export const SCENE_01_CONFIG: Scene01Config = {
     turnRadius: 14,
     straightIn: 38,
     trailerTrackingLength: 10.55,
-    crossfadePortion: 0.35,
+    revealStart: 0.3,
     cameraSettleStart: 0.5,
   },
 
   journey: {
     travel: 180,
     cameraPortion: 0.45,
-    fadePortion: 0.55,
   },
 
   lighting: {
@@ -274,20 +273,60 @@ export const SCENE_01_CONFIG: Scene01Config = {
     floor: { size: 2600, color: '#17191d', roughness: 0.94, metalness: 0.04, envMapIntensity: 0.35 },
     markings: { color: '#454b53', opacity: 0.6, laneHalfWidth: 2.4, length: 90, stripeLength: 2.4, stripeGap: 1.6 },
     contactShadow: { opacity: 0.55, blur: 2.2, width: 80, height: 40, far: 3, resolution: 1024 },
-    // Cinematic backdrop: the MMI fleet garage. Invisible while the vehicles enter, fades in from 40% of the
-    // approach and is fully visible the moment they couple. The facade stands 26 m behind the coupling line.
+    showSlotBounds: false,
+
+    // Open-air daylight the scene blends to while the combination leaves the yard (departure.revealStart → highway):
+    // the enclosed-yard fog (dark, short) gives way to a long, light haze and a gradient sky, so the city emerges
+    // from the distance. Lighting, not a replaceable environment.
+    atmosphere: {
+      sky: { zenith: '#56616d', horizon: '#9aa3ac', radius: 1200 },
+      haze: { color: '#959ea7', near: 120, far: 1100 },
+      groundColor: '#2c2f33',
+    },
+
+    // ENVIRONMENT SLOTS — each environment is an independent, replaceable group (see EnvironmentSlot.tsx). `slot`
+    // places it in the world, reserves its bounds and may name a GLB that replaces the procedural stand-in, e.g.
+    //   model: { url: `${import.meta.env.BASE_URL}models/environment/garage.glb`, scale: 1, position: [0, 0, 0],
+    //            rotation: [0, 0, 0], castShadow: false, receiveShadow: true }
+    // Everything else in each block describes the stand-in, in slot-local metres.
+
+    // MMI fleet garage. Slot origin = centre line of the facade's front plane, 26 m behind the coupling line; the hall
+    // extends to −Z and its forecourt apron to +Z. Fades in from 40% of the approach, then stays: it never fades out.
     garage: {
       enabled: true,
+      slot: { position: [0, 0, -26], rotationY: 0, bounds: { min: [-90, 0, -42], max: [90, 17, 42] }, model: null },
       fadeStartPortion: 0.4,
-      position: [0, 0, -26],
-      width: 150,
-      depth: 40,
-      eavesHeight: 14.5,
-      bays: { count: 7, pitch: 12.5, openingHeight: 12.3, openBays: [1, 2, 3, 4, 5] },
+      // Bounded building: branding wall from x −50 to the first bay at −29.25, five open bays, and a short pier to +35.
+      // Its left corner is in frame in the establishing shot, and its right-hand end (with the city beyond it) comes
+      // into view as the camera follows the departure.
+      building: { left: -50, right: 35, depth: 40, eavesHeight: 14.5, parapetHeight: 1.0 },
+      bays: { start: -29.25, count: 5, pitch: 12.5, openingHeight: 12.3, rear: { open: true, height: 9.5 } },
       columns: { size: 0.7, interiorRows: [13, 26] },
       trusses: { spacing: 6.25, topChordHeight: 13.8, bottomChordHeight: 11.6, diagonalPitch: 3.2, purlinPitch: 5 },
       luminaires: { height: 10.9, rowSpacing: 8, spacing: 6.25, length: 3.2 },
       ribPitch: 1.0,
+      brandWallJoints: [6.0, 12.6],
+      // Forecourt the vehicles couple on; its kerb (16 m in front of the coupling line) bounds the yard and is broken
+      // only where the exit road leaves for the highway.
+      apron: { front: 42, left: -90, right: 90, color: '#1b1e22', daylightColor: '#383b3f', kerb: { width: 0.3, height: 0.12, color: '#2f3338' } },
+      // Company sign on the branding wall: 10.6 × 2.6 m, its face 9.2 m up, its right edge 2.4 m clear of the first bay
+      // column. Sized and placed so that, with the level cameras, it is entirely in frame in the wide establishing shot,
+      // through the U-turn and in the highway hold on screens of aspect ≥ 1.7 (typical desktop browser windows), and
+      // entirely out of the opening and coupling shots.
+      sign: {
+        enabled: true,
+        text: 'MEGA MOVE INDIA',
+        centre: [-37.3, 9.2],
+        width: 10.6,
+        height: 2.6,
+        depth: 0.22,
+        standoff: 0.28,
+        fontFamily: 'var(--font-sans)',
+        fontWeight: 700,
+        letterSpacing: 0.06,
+        colors: { face: '#e3e5e7', text: '#1c2026', border: '#b9bdc2', frame: '#2a2e34', bracket: '#3a3f46', accent: '#d9a521', lamp: '#f2ead8' },
+        lamps: { count: 3, intensity: 0.6 },
+      },
       zones: [
         { kind: 'inspection', position: [-12.5, 0, 15], size: [9, 16] },
         { kind: 'inspection', position: [12.5, 0, 15], size: [9, 16] },
@@ -298,17 +337,18 @@ export const SCENE_01_CONFIG: Scene01Config = {
         { kind: 'puller', x: 0, depth: 9.5, rotationY: Math.PI / 2 },
         { kind: 'trailer', x: -20, depth: 21, rotationY: 0 },
         { kind: 'puller', x: 14, depth: 25, rotationY: Math.PI },
-        { kind: 'lowbed', x: 24, depth: 13, rotationY: 0 },
+        { kind: 'lowbed', x: 22, depth: 13, rotationY: 0 },
       ],
       colors: {
         bollard: '#d9a521',
         frontColumn: '#2b2f35',
         doorHead: '#4a4f56',
-        closedDoor: '#50555c',
         bayLight: '#ffe3b8',
         cladding: '#3a3f45',
         rib: '#30343a',
         fascia: '#24282d',
+        brandWall: '#4b5057',
+        plinth: '#5d6166',
         fleetPaint: '#2f3338',
         fleetSteel: '#8d949c',
         interiorColumn: '#353a40',
@@ -324,11 +364,26 @@ export const SCENE_01_CONFIG: Scene01Config = {
       },
       lightIntensity: { bay: 1.0, luminaire: 1.8 },
     },
-    // The highway the combination departs onto: a two-way road along X in the foreground. Its centre line is
-    // 1.9 m beyond the end of the departure path so the vehicle sits in the far (left-hand traffic) lane.
+
+    // Exit road from the apron's kerb to the highway's far carriageway edge. Its stand-in outline is derived in WORLD
+    // space from the departure path (10.5 m wide: covers the trailer's swept path including its tail swing), clipped
+    // at the apron edge and the carriageway, then mapped into this slot — so the paving stays under the path wherever
+    // the slot is placed.
+    road: {
+      enabled: true,
+      slot: { position: [0, 0, 0], rotationY: 0, bounds: { min: [-40, 0, 14], max: [-10, 1, 28] }, model: null },
+      width: 10.5,
+      overlap: 0.05,
+      color: '#2a2c2f',
+      grain: 0.6,
+    },
+
+    // Two-way highway along X in the foreground. Slot origin = its centre line, 1.9 m beyond the end of the departure
+    // path so the vehicle sits in the far (left-hand traffic) lane. Street lights stand on the far verge except in front
+    // of the garage (local x −75…48), where a pole would stand between the camera and the coupling.
     highway: {
       enabled: true,
-      centreZ: 29.9,
+      slot: { position: [0, 0, 29.9], rotationY: 0, bounds: { min: [-1300, 0, -9.5], max: [1300, 12, 9.5] }, model: null },
       length: 2600,
       lanes: 2,
       laneWidth: 3.75,
@@ -337,29 +392,22 @@ export const SCENE_01_CONFIG: Scene01Config = {
       markings: { dashLength: 3, dashGap: 6, lineWidth: 0.15, edgeLineInset: 0.25 },
       colors: { asphalt: '#2a2c2f', shoulder: '#3a3b3c', verge: '#33363a', centreLine: '#cfd2d4', edgeLine: '#c9ccce' },
       grain: 0.6,
-      // Paved yard exit under the departure path: 10.5 m wide (covers the trailer's swept path including its tail
-      // swing, ~0.45 m beyond the path's outer offset at the end of the turn). Its straight runs along the former
-      // garage frontage into the fog (to the road's end, at least 2 m behind the trailer) and it tucks 5 cm under
-      // the carriageway at the junction.
-      access: { width: 10.5, rearMargin: 2, runToRoadEnd: true, overlap: 0.05 },
+      streetLights: { enabled: true, spacing: 36, height: 10, armLength: 2.6, exclude: [-75, 48], color: '#6c727a' },
     },
-    // City edge for the closing journey, layered for depth: low industry 80–120 m behind the highway's far side,
-    // mid-rise commercial blocks at 170–260 m, and a deep skyline band at 460–900 m that the daylight haze softens into
-    // silhouettes. Street lights on the far verge give the strongest sense of passing. The viaduct is available
-    // but off by default (it read as a heavy band across the frame).
+
+    // City edge beyond the garage. Slot origin 95 m behind the coupling line (29 m behind the garage's back wall):
+    // low industry at 0–40 m, mid-rise blocks at 75–165 m and a skyline at 365–805 m behind that (world z −95 … −936).
+    // The span covers the widest view (32:9) over the whole journey. Opaque and always present; the enclosed-yard fog
+    // hides it until the daylight haze takes over.
     city: {
       enabled: true,
+      slot: { position: [0, 0, -95], rotationY: 0, bounds: { min: [-1200, 0, -845], max: [1500, 170, 0] }, model: null },
       seed: 20251,
-      span: [-560, 760],
-      skyline: { zRange: [-460, -900], width: [18, 44], depth: [18, 36], height: [30, 78], gap: [1, 9], landmarkChance: 0.12, landmarkHeight: [90, 128] },
-      midrise: { zRange: [-170, -260], width: [24, 55], depth: [16, 28], height: [14, 38], gap: [6, 22] },
-      industrial: { zRange: [-80, -120], width: [34, 80], depth: [18, 30], height: [6, 12], gap: [10, 34], stackChance: 0.3, stackHeight: [24, 38] },
-      viaduct: { enabled: false, z: -44, deckHeight: 11, deckThickness: 1.6, deckWidth: 9, pierSpacing: 30, pierSize: 2.2 },
-      streetLights: { enabled: true, z: 22.9, spacing: 36, height: 10, armLength: 2.6 },
-      sky: { zenith: '#56616d', horizon: '#9aa3ac', radius: 1200 },
-      fog: { color: '#959ea7', near: 200, far: 1150 },
-      groundColor: '#2c2f33',
-      colors: { glass: '#5f6b77', concrete: '#7b8086', steel: '#4b525a', industrial: '#4f545b', roof: '#3d4248', infrastructure: '#6c727a' },
+      span: [-1200, 1500],
+      skyline: { zRange: [-365, -805], width: [18, 44], depth: [18, 36], height: [30, 78], gap: [1, 9], landmarkChance: 0.12, landmarkHeight: [90, 128] },
+      midrise: { zRange: [-75, -165], width: [24, 55], depth: [16, 28], height: [14, 38], gap: [6, 22] },
+      industrial: { zRange: [0, -40], width: [34, 80], depth: [18, 30], height: [6, 12], gap: [10, 34], stackChance: 0.3, stackHeight: [24, 38] },
+      colors: { glass: '#5f6b77', concrete: '#7b8086', steel: '#4b525a', industrial: '#4f545b', roof: '#3d4248' },
     },
   },
 
@@ -375,15 +423,19 @@ export const SCENE_01_CONFIG: Scene01Config = {
     initial: { start: 0, end: 0.03 },
     /** Both vehicles travel towards the coupling point over the SAME window and arrive together. */
     approach: { start: 0.03, end: 0.3 },
-    /** Coupled: subtle camera push-in and the caption reveal; the garage stays visible. */
+    /** Coupled: subtle camera push-in and the caption reveal. */
     couplingHold: { start: 0.3, end: 0.36 },
     /** Wide establishing shot: the camera pulls out; nothing moves yet; the caption fades out. */
     establish: { start: 0.36, end: 0.425 },
-    /** The combination drives off, U-turns towards the camera and settles on the highway; garage → highway crossfade. */
+    /**
+     * The combination drives off the apron, U-turns towards the camera and settles on the highway. The garage stays,
+     * fixed in the world, and recedes as the camera follows; daylight replaces the enclosed-yard atmosphere from
+     * `departure.revealStart`, so the city emerges through and beyond the garage.
+     */
     departure: { start: 0.425, end: 0.685 },
     /** Short hold on the highway composition (combination on the right). */
     highwayHold: { start: 0.685, end: 0.73 },
-    /** The combination drives on into the city: camera re-frames bottom-left and travels with it; city fades in. */
+    /** The combination drives on: the camera re-frames bottom-left and travels with it, leaving the garage behind and revealing the city. */
     city: { start: 0.73, end: 0.93 },
     /** Final hold on the city composition (combination bottom-left, right side clear). */
     cityHold: { start: 0.93, end: 1 },
@@ -395,9 +447,8 @@ export const SCENE_01_CONFIG: Scene01Config = {
     garageFade: 'power1.inOut',
     establish: 'power1.inOut',
     departure: 'power2.inOut',
-    crossfade: 'power1.inOut',
+    daylight: 'power1.inOut',
     cameraSettle: 'power1.inOut',
-    cityFade: 'power1.inOut',
     cityTravel: 'power1.inOut',
     cityCamera: 'power1.inOut',
     overlay: 'power1.out',

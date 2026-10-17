@@ -5,11 +5,9 @@
  * rest of the canvas. Changing `resetKey` clears the error and retries.
  */
 import { Component, type ReactNode } from 'react'
-import type { ModelId } from './types'
-
 export interface ModelErrorBoundaryProps {
-  /** Model this boundary guards. Not used for rendering; it labels the boundary in React DevTools and error reports. */
-  modelId: ModelId
+  /** Model this boundary guards (a manifest id or an environment slot name). Not used for rendering; it labels the boundary in React DevTools and error reports. */
+  modelId: string
   fallback: ReactNode
   /** Receives whatever was thrown (usually the Error React Three Fiber wraps a ModelLoadError in). */
   onError?: (error: unknown) => void

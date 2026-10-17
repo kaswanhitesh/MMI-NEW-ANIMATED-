@@ -1,34 +1,28 @@
 /**
- * Procedural CITY EDGE backdrop and daylight SKY for the closing journey of Scene 01.
+ * Procedural stand-in for the CITY environment of Scene 01: a seeded generator
+ * lays out low industrial sheds with stacks, a band of mid-rise commercial
+ * blocks and a distant skyline of towers (some taller landmark towers with
+ * setback crowns) — boxes only, one InstancedMesh per material (6 draw calls),
+ * no textures. Authored in its slot's local space; it stands entirely behind
+ * the garage and the road from the camera's point of view.
  *
- * City: a seeded generator lays out a distant skyline of towers (some taller landmark towers with setback
- * crowns), a band of mid-rise commercial blocks, low industrial sheds with stacks, an elevated metro viaduct
- * and street lights along the highway's far verge — boxes only, one InstancedMesh per material (≈ 9 draw
- * calls), no textures. It stands entirely behind the road, so the vehicles always occlude it, and it uses the
- * scene fog, so distance haze gives it atmospheric depth. Forward travel is conveyed by the CAMERA moving past
- * it (true parallax: the far skyline drifts slowly, poles and markings pass quickly); nothing here moves.
- *
- * Sky: a large back-faced sphere with a vertical gradient (haze at the horizon, muted blue-grey above) that
- * follows the camera, drawn first and never fogged.
- *
- * Fading: `getOpacity()` is read every rendered frame and written to every material, so the scroll timeline
- * crossfades the city and sky in (and out again on scroll-up). Materials keep depth writes and draw front to
- * back with explicit negative render orders, ahead of the garage and the road; the sky draws before all.
+ * It is opaque and always present: nothing here fades. In the enclosed-yard
+ * atmosphere the scene's short, dark fog swallows it completely; as the
+ * daylight haze takes over (a much longer, lighter fog) it emerges in the
+ * distance — through the garage's drive-through openings and beyond the
+ * building's end — and the camera travelling with the vehicle reveals the rest
+ * with true parallax (the far skyline drifts slowly, nearer blocks faster).
  */
-import { useFrame, useThree } from '@react-three/fiber'
+import { useThree } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
-import { BackSide, BoxGeometry, Color, Float32BufferAttribute, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, Quaternion, SphereGeometry, Vector3 } from 'three'
+import { BoxGeometry, Color, InstancedMesh, Matrix4, MeshStandardMaterial, Quaternion, Vector3 } from 'three'
 import type { Vec3 } from '../assets/types'
 import type { CityBuildingBand, CityConfig } from './types'
 
 export interface CityBackdropProps {
   config: CityConfig
-  /** Y of the ground plane. */
+  /** Y of the ground plane, slot-local. */
   groundY: number
-  /** Read every frame; 0 = invisible, 1 = fully visible. Clamped. */
-  getOpacity: () => number
-  /** X ranges where no street light may stand (e.g. where an access road joins the highway). */
-  lightGaps?: ReadonlyArray<readonly [number, number]>
 }
 
 interface BoxItem {
@@ -38,31 +32,14 @@ interface BoxItem {
   tone: number
 }
 
-type PartKey = 'lamp' | 'pole' | 'viaduct' | 'industrial' | 'roof' | 'concrete' | 'steel' | 'glass'
-
-/** Draw order, front to back (lower = earlier); all ahead of the garage (−14…) and the road (−3…). */
-const RENDER_ORDER: Readonly<Record<PartKey, number>> = {
-  lamp: -72,
-  pole: -71,
-  viaduct: -70,
-  industrial: -68,
-  roof: -67,
-  concrete: -66,
-  steel: -65,
-  glass: -64,
-}
-const SKY_ORDER = -100
-const PART_KEYS = Object.keys(RENDER_ORDER) as PartKey[]
+type PartKey = 'industrial' | 'roof' | 'concrete' | 'steel' | 'glass'
+const PART_KEYS: readonly PartKey[] = ['industrial', 'roof', 'concrete', 'steel', 'glass']
 
 const _matrix = new Matrix4()
 const _position = new Vector3()
 const _scale = new Vector3()
 const _identity = new Quaternion()
 const _tone = new Color()
-
-function clamp01(value: number): number {
-  return value < 0 ? 0 : value > 1 ? 1 : value
-}
 
 /** Small deterministic PRNG (mulberry32). */
 function createRandom(seed: number): () => number {
@@ -89,7 +66,7 @@ function walkBand(rand: () => number, span: readonly [number, number], band: Cit
 }
 
 /** Lays out every box of the city from the config. Pure and deterministic. */
-function buildCity(cfg: CityConfig, groundY: number, lightGaps: ReadonlyArray<readonly [number, number]>): Record<PartKey, BoxItem[]> {
+function buildCity(cfg: CityConfig, groundY: number): Record<PartKey, BoxItem[]> {
   const parts = Object.fromEntries(PART_KEYS.map((k) => [k, [] as BoxItem[]])) as Record<PartKey, BoxItem[]>
   const rand = createRandom(cfg.seed)
   const y0 = groundY
@@ -157,43 +134,15 @@ function buildCity(cfg: CityConfig, groundY: number, lightGaps: ReadonlyArray<re
     }
   })
 
-  // Elevated metro viaduct running parallel to the highway.
-  const v = cfg.viaduct
-  tone = 1
-  if (v.enabled) {
-    const length = cfg.span[1] - cfg.span[0]
-    const cx = (cfg.span[0] + cfg.span[1]) / 2
-    box('viaduct', cx, y0 + v.deckHeight + v.deckThickness / 2, v.z, length, v.deckThickness, v.deckWidth)
-    box('viaduct', cx, y0 + v.deckHeight + v.deckThickness + 0.6, v.z + v.deckWidth / 2 - 0.15, length, 1.2, 0.3)
-    for (let x = cfg.span[0] + v.pierSpacing / 2; x < cfg.span[1]; x += v.pierSpacing) {
-      box('viaduct', x, y0 + v.deckHeight / 2, v.z, v.pierSize, v.deckHeight, v.pierSize)
-      box('viaduct', x, y0 + v.deckHeight - 0.5, v.z, v.deckWidth * 0.8, 1, v.pierSize * 1.4)
-    }
-  }
-
-  // Street lights along the highway's far verge, arms reaching over the shoulder (towards +Z).
-  const sl = cfg.streetLights
-  tone = 1
-  if (sl.enabled) {
-    const blocked = (x: number) => lightGaps.some(([a, b]) => x >= Math.min(a, b) - 2 && x <= Math.max(a, b) + 2)
-    for (let x = Math.ceil(cfg.span[0] / sl.spacing) * sl.spacing; x < cfg.span[1]; x += sl.spacing) {
-      if (blocked(x)) continue
-      box('pole', x, y0 + sl.height / 2, sl.z, 0.28, sl.height, 0.28)
-      box('pole', x, y0 + sl.height - 0.1, sl.z + sl.armLength / 2, 0.16, 0.16, sl.armLength)
-      box('lamp', x, y0 + sl.height - 0.25, sl.z + sl.armLength - 0.2, 0.36, 0.14, 0.7)
-    }
-  }
   return parts
 }
 
 function createMaterials(cfg: CityConfig): Record<PartKey, MeshStandardMaterial> {
-  const make = (color: string, roughness: number, metalness: number) =>
-    new MeshStandardMaterial({ color, roughness, metalness, transparent: true, opacity: 0, depthWrite: true, toneMapped: false })
+  // Tone-mapped like the garage and the vehicles, so the city never out-shines them; fog is applied after tone mapping,
+  // so fully hazed buildings still land exactly on the haze colour at the horizon.
+  const make = (color: string, roughness: number, metalness: number) => new MeshStandardMaterial({ color, roughness, metalness })
   const c = cfg.colors
   return {
-    lamp: make(c.infrastructure, 0.5, 0.4),
-    pole: make(c.infrastructure, 0.55, 0.5),
-    viaduct: make(c.concrete, 0.9, 0.02),
     industrial: make(c.industrial, 0.85, 0.15),
     roof: make(c.roof, 0.9, 0.05),
     concrete: make(c.concrete, 0.88, 0.02),
@@ -202,7 +151,7 @@ function createMaterials(cfg: CityConfig): Record<PartKey, MeshStandardMaterial>
   }
 }
 
-function InstancedBoxes({ items, material, geometry, renderOrder, name }: { items: readonly BoxItem[]; material: MeshStandardMaterial; geometry: BoxGeometry; renderOrder: number; name: string }) {
+function InstancedBoxes({ items, material, geometry, name }: { items: readonly BoxItem[]; material: MeshStandardMaterial; geometry: BoxGeometry; name: string }) {
   const ref = useRef<InstancedMesh>(null)
   const invalidate = useThree((state) => state.invalidate)
   useLayoutEffect(() => {
@@ -221,68 +170,23 @@ function InstancedBoxes({ items, material, geometry, renderOrder, name }: { item
     invalidate()
   }, [items, invalidate])
   if (items.length === 0) return null
-  return <instancedMesh key={items.length} ref={ref} name={name} args={[geometry, material, items.length]} renderOrder={renderOrder} />
+  return <instancedMesh key={items.length} ref={ref} name={name} args={[geometry, material, items.length]} />
 }
 
-/** Vertical gradient sphere: horizon colour at and below the horizon, easing to the zenith colour overhead. */
-function createSkyGeometry(cfg: CityConfig['sky']): SphereGeometry {
-  const geometry = new SphereGeometry(cfg.radius, 48, 24)
-  const horizon = new Color(cfg.horizon)
-  const zenith = new Color(cfg.zenith)
-  const position = geometry.getAttribute('position')
-  const colors = new Float32Array(position.count * 3)
-  const c = new Color()
-  for (let i = 0; i < position.count; i++) {
-    const t = Math.max(0, position.getY(i) / cfg.radius)
-    c.copy(horizon).lerp(zenith, Math.pow(t, 0.55))
-    colors[i * 3] = c.r
-    colors[i * 3 + 1] = c.g
-    colors[i * 3 + 2] = c.b
-  }
-  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3))
-  return geometry
-}
-
-export function CityBackdrop({ config, groundY, getOpacity, lightGaps = [] }: CityBackdropProps) {
-  const groupRef = useRef<Group>(null)
-  const skyRef = useRef<Mesh>(null)
-  const lastOpacity = useRef(Number.NaN)
-
+export function CityBackdrop({ config, groundY }: CityBackdropProps) {
   const geometry = useMemo(() => new BoxGeometry(1, 1, 1), [])
   const materials = useMemo(() => createMaterials(config), [config])
-  const parts = useMemo(() => buildCity(config, groundY, lightGaps), [config, groundY, lightGaps])
-  const skyGeometry = useMemo(() => createSkyGeometry(config.sky), [config.sky])
-  const skyMaterial = useMemo(
-    () => new MeshBasicMaterial({ vertexColors: true, side: BackSide, fog: false, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }),
-    [],
-  )
+  const parts = useMemo(() => buildCity(config, groundY), [config, groundY])
 
   useEffect(() => () => {
     for (const key of PART_KEYS) materials[key].dispose()
   }, [materials])
   useEffect(() => () => geometry.dispose(), [geometry])
-  useEffect(() => () => skyGeometry.dispose(), [skyGeometry])
-  useEffect(() => () => skyMaterial.dispose(), [skyMaterial])
-  useEffect(() => {
-    lastOpacity.current = Number.NaN
-  }, [materials])
-
-  useFrame((state) => {
-    // The sky is centred on the camera so its horizon never shifts as the camera travels.
-    if (skyRef.current) skyRef.current.position.copy(state.camera.position)
-    const opacity = clamp01(getOpacity())
-    if (opacity === lastOpacity.current) return
-    lastOpacity.current = opacity
-    for (const key of PART_KEYS) materials[key].opacity = opacity
-    skyMaterial.opacity = opacity
-    if (groupRef.current) groupRef.current.visible = opacity > 0.001
-  })
 
   return (
-    <group ref={groupRef} name="city" visible={false}>
-      <mesh ref={skyRef} name="city-sky" geometry={skyGeometry} material={skyMaterial} renderOrder={SKY_ORDER} frustumCulled={false} />
+    <group name="city">
       {PART_KEYS.map((key) => (
-        <InstancedBoxes key={key} name={`city-${key}`} items={parts[key]} material={materials[key]} geometry={geometry} renderOrder={RENDER_ORDER[key]} />
+        <InstancedBoxes key={key} name={`city-${key}`} items={parts[key]} material={materials[key]} geometry={geometry} />
       ))}
     </group>
   )

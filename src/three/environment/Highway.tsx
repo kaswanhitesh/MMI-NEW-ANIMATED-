@@ -1,119 +1,39 @@
 /**
- * Procedural two-way highway running along X: asphalt carriageway with a
- * subtle generated grain texture, dashed centre line, solid edge lines, gravel
- * shoulders and verges, plus an optional paved ACCESS ROAD (any closed outline,
- * e.g. a yard exit that loops onto the highway) whose junction breaks the far
- * verge, shoulder and edge line. Flat planes and one shape; the dashes are a
- * single InstancedMesh; no image assets.
+ * Procedural stand-in for the HIGHWAY environment: a straight two-way road
+ * along its slot's local X axis, centred on local z = 0 — asphalt carriageway
+ * with a subtle generated grain, dashed centre line, solid edge lines,
+ * shoulders, verges, and street lights on the far verge (local −Z, the garage
+ * side) outside the stretch in front of the garage. Flat planes plus a few
+ * instanced meshes; no image assets.
  *
- * Ground layers are separated by height so nothing coplanar can z-fight, and
- * the scene's yard floor pushes itself back with a polygon offset:
- *   floor 0 · yard markings 4 mm · highway surfaces 7 mm · access road 11 mm · paint 15 mm · contact shadows 20 mm.
- * The access road lies ON TOP of the far shoulder and verge, so where it crosses them it simply covers them
- * (a natural junction); it stops a few centimetres into the carriageway so that joint never cracks. Only
- * the far edge line is broken across the junction mouth. Everything lies below the contact-shadow plane, so vehicle
- * shadows fall onto the road; the meshes also receive the key-light shadow.
- *
- * `getOpacity()` is read every rendered frame and written to the materials,
- * so the scene's scroll timeline can crossfade the road in while the garage
- * fades out. Materials are not tone-mapped (like the yard floor), so the
- * configured colours sit correctly against it and fog to the background.
+ * It is permanent world infrastructure: opaque, always present, never faded.
+ * The exit road from the garage (a separate environment) joins its far side;
+ * `farEdgeGap` breaks the far edge line across that junction mouth. Ground
+ * layer heights are shared with the other environments (see roadSurface.ts).
  */
-import { useFrame, useThree } from '@react-three/fiber'
+import { useThree } from '@react-three/fiber'
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
-import {
-  DataTexture,
-  Group,
-  InstancedMesh,
-  LinearFilter,
-  LinearMipmapLinearFilter,
-  Matrix4,
-  MeshStandardMaterial,
-  Quaternion,
-  RepeatWrapping,
-  RGBAFormat,
-  Shape,
-  SRGBColorSpace,
-  Vector2,
-  Vector3,
-  type Texture,
-} from 'three'
+import { BoxGeometry, InstancedMesh, Matrix4, MeshStandardMaterial, Quaternion, Vector3 } from 'three'
+import { createGrainTexture, FLAT_EULER, GRAIN_TILE, LIFT, roadMaterial } from './roadSurface'
 import type { HighwayConfig } from './types'
-
-export interface HighwayAccessRoad {
-  /** Closed outline in world XZ (metres). */
-  outline: ReadonlyArray<readonly [number, number]>
-  /** X range where it meets the far side of the highway; that stretch of the far edge line is omitted. */
-  junction: readonly [number, number] | null
-}
 
 export interface HighwayProps {
   config: HighwayConfig
-  /** Y of the ground plane the road lies on. */
+  /** Y of the ground plane, slot-local. */
   groundY: number
-  /** Read every frame; 0 = invisible, 1 = fully visible. Clamped. */
-  getOpacity: () => number
-  /** Optional paved access road joining the highway's far side. */
-  access?: HighwayAccessRoad
+  /** Slot-local X range where the far edge line is omitted (the exit road's junction mouth). */
+  farEdgeGap?: readonly [number, number] | null
 }
-
-/** Heights above the ground plane (m); see the layer table above. */
-const ROAD_LIFT = 0.007
-const ACCESS_LIFT = 0.011
-const PAINT_LIFT = 0.015
-/** Grain texture size; one tile covers GRAIN_TILE metres. */
-const GRAIN_SIZE = 128
-const GRAIN_TILE = 7
-/** Draw orders: after the garage (negative tens), before the yard's transparent overlays (0). */
-const ORDER_SURFACE = -3
-const ORDER_PAINT = -2
 
 const _matrix = new Matrix4()
 const _position = new Vector3()
 const _scale = new Vector3(1, 1, 1)
 const FLAT = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -Math.PI / 2)
-const FLAT_EULER: [number, number, number] = [-Math.PI / 2, 0, 0]
-
-function clamp01(value: number): number {
-  return value < 0 ? 0 : value > 1 ? 1 : value
-}
-
-/** Deterministic grey grain texture (seeded LCG, so renders are reproducible). */
-function createGrainTexture(strength: number): DataTexture {
-  const size = GRAIN_SIZE
-  const data = new Uint8Array(size * size * 4)
-  let seed = 1234567
-  const next = () => {
-    seed = (seed * 1664525 + 1013904223) >>> 0
-    return seed / 4294967296
-  }
-  for (let i = 0; i < size * size; i++) {
-    const v = 1 + (next() - 0.5) * 0.5 * strength
-    const g = Math.max(0, Math.min(255, Math.round(v * 200)))
-    data[i * 4] = g
-    data[i * 4 + 1] = g
-    data[i * 4 + 2] = g
-    data[i * 4 + 3] = 255
-  }
-  const texture = new DataTexture(data, size, size, RGBAFormat)
-  texture.wrapS = RepeatWrapping
-  texture.wrapT = RepeatWrapping
-  texture.colorSpace = SRGBColorSpace
-  // Mipmapped, trilinear and anisotropic: point-sampled noise at grazing angles would shimmer while scrolling.
-  texture.magFilter = LinearFilter
-  texture.minFilter = LinearMipmapLinearFilter
-  texture.generateMipmaps = true
-  texture.anisotropy = 8
-  texture.needsUpdate = true
-  return texture
-}
-
-function surfaceMaterial(color: string, roughness: number, map?: Texture): MeshStandardMaterial {
-  return new MeshStandardMaterial({ color, roughness, metalness: 0, map: map ?? null, transparent: true, opacity: 0, depthWrite: true, toneMapped: false })
-}
+const _identity = new Quaternion()
+const _boxScale = new Vector3()
 
 /** Splits [−L/2, L/2] around an optional gap into the spans that remain. */
-function spansAround(length: number, gap: readonly [number, number] | null): Array<[number, number]> {
+function spansAround(length: number, gap: readonly [number, number] | null | undefined): Array<[number, number]> {
   const a = -length / 2
   const b = length / 2
   if (!gap) return [[a, b]]
@@ -124,57 +44,82 @@ function spansAround(length: number, gap: readonly [number, number] | null): Arr
   return out
 }
 
-export function Highway({ config, groundY, getOpacity, access }: HighwayProps) {
-  const groupRef = useRef<Group>(null)
-  const dashesRef = useRef<InstancedMesh>(null)
-  const lastOpacity = useRef(Number.NaN)
-  const invalidate = useThree((state) => state.invalidate)
+interface LightBox {
+  position: [number, number, number]
+  size: [number, number, number]
+}
 
+/** Street-light boxes (poles, arms, lamp heads) along the far verge, skipping the excluded stretch. */
+function buildStreetLights(config: HighwayConfig, groundY: number): { poles: LightBox[]; lamps: LightBox[] } {
+  const sl = config.streetLights
+  const poles: LightBox[] = []
+  const lamps: LightBox[] = []
+  if (!sl.enabled || !(sl.spacing > 0)) return { poles, lamps }
+  const carriageway = config.lanes * config.laneWidth
+  // Centre of the far verge; the arm reaches back over the shoulder towards the road.
+  const z = -(carriageway / 2 + config.shoulderWidth + config.vergeWidth / 2)
+  const [e0, e1] = sl.exclude[0] < sl.exclude[1] ? sl.exclude : [sl.exclude[1], sl.exclude[0]]
+  const half = config.length / 2
+  for (let x = Math.ceil(-half / sl.spacing) * sl.spacing; x <= half; x += sl.spacing) {
+    if (x >= e0 && x <= e1) continue
+    poles.push({ position: [x, groundY + sl.height / 2, z], size: [0.28, sl.height, 0.28] })
+    poles.push({ position: [x, groundY + sl.height - 0.1, z + sl.armLength / 2], size: [0.16, 0.16, sl.armLength] })
+    lamps.push({ position: [x, groundY + sl.height - 0.25, z + sl.armLength - 0.2], size: [0.36, 0.14, 0.7] })
+  }
+  return { poles, lamps }
+}
+
+function InstancedLightBoxes({ items, material, geometry, name }: { items: readonly LightBox[]; material: MeshStandardMaterial; geometry: BoxGeometry; name: string }) {
+  const ref = useRef<InstancedMesh>(null)
+  const invalidate = useThree((state) => state.invalidate)
+  useLayoutEffect(() => {
+    const mesh = ref.current
+    if (!mesh) return
+    items.forEach(({ position, size }, index) => {
+      _position.set(...position)
+      _matrix.compose(_position, _identity, _boxScale.set(...size))
+      mesh.setMatrixAt(index, _matrix)
+    })
+    mesh.instanceMatrix.needsUpdate = true
+    mesh.computeBoundingSphere()
+    invalidate()
+  }, [items, invalidate])
+  if (items.length === 0) return null
+  return <instancedMesh key={items.length} ref={ref} name={name} args={[geometry, material, items.length]} />
+}
+
+export function Highway({ config, groundY, farEdgeGap }: HighwayProps) {
+  const dashesRef = useRef<InstancedMesh>(null)
+  const invalidate = useThree((state) => state.invalidate)
   const carriageway = config.lanes * config.laneWidth
 
-  // One grain image, two samplers: the carriageway plane's UVs span its whole size, the access shape's UVs are metres.
-  const textures = useMemo(() => {
-    const road = createGrainTexture(config.grain)
-    road.repeat.set(config.length / GRAIN_TILE, carriageway / GRAIN_TILE)
-    const accessRoad = road.clone()
-    accessRoad.repeat.set(1 / GRAIN_TILE, 1 / GRAIN_TILE)
-    accessRoad.needsUpdate = true
-    return { road, accessRoad }
+  const grain = useMemo(() => {
+    const texture = createGrainTexture(config.grain)
+    texture.repeat.set(config.length / GRAIN_TILE, carriageway / GRAIN_TILE)
+    return texture
   }, [config.grain, config.length, carriageway])
 
   const materials = useMemo(
     () => ({
-      asphalt: surfaceMaterial(config.colors.asphalt, 0.95, textures.road),
-      access: surfaceMaterial(config.colors.asphalt, 0.95, textures.accessRoad),
-      shoulder: surfaceMaterial(config.colors.shoulder, 0.98),
-      verge: surfaceMaterial(config.colors.verge, 1),
-      centreLine: surfaceMaterial(config.colors.centreLine, 0.7),
-      edgeLine: surfaceMaterial(config.colors.edgeLine, 0.7),
+      asphalt: roadMaterial(config.colors.asphalt, 0.95, grain),
+      shoulder: roadMaterial(config.colors.shoulder, 0.98),
+      verge: roadMaterial(config.colors.verge, 1),
+      centreLine: roadMaterial(config.colors.centreLine, 0.7),
+      edgeLine: roadMaterial(config.colors.edgeLine, 0.7),
+      pole: new MeshStandardMaterial({ color: config.streetLights.color, roughness: 0.55, metalness: 0.5 }),
     }),
-    [config.colors, textures],
+    [config.colors, config.streetLights.color, grain],
   )
+  const boxGeometry = useMemo(() => new BoxGeometry(1, 1, 1), [])
+  const lights = useMemo(() => buildStreetLights(config, groundY), [config, groundY])
 
-  useEffect(() => {
-    return () => {
-      for (const material of Object.values(materials)) material.dispose()
-    }
+  useEffect(() => () => {
+    for (const material of Object.values(materials)) material.dispose()
   }, [materials])
-  useEffect(
-    () => () => {
-      textures.road.dispose()
-      textures.accessRoad.dispose()
-    },
-    [textures],
-  )
-
-  const accessShape = useMemo(() => {
-    if (!access || access.outline.length < 3) return null
-    // Shape space (x, y) maps to world (x, −z) once the mesh is laid flat with a −90° X rotation.
-    return new Shape(access.outline.map(([x, z]) => new Vector2(x, -z)))
-  }, [access])
+  useEffect(() => () => grain.dispose(), [grain])
+  useEffect(() => () => boxGeometry.dispose(), [boxGeometry])
 
   const layout = useMemo(() => {
-    const z = config.centreZ
     const halfCw = carriageway / 2
     const shoulderZ = halfCw + config.shoulderWidth / 2
     const vergeZ = halfCw + config.shoulderWidth + config.vergeWidth / 2
@@ -182,16 +127,16 @@ export function Highway({ config, groundY, getOpacity, access }: HighwayProps) {
     const period = config.markings.dashLength + config.markings.dashGap
     const dashCount = Math.max(0, Math.floor(config.length / period))
     const dashX0 = -config.length / 2 + config.markings.dashLength / 2
-    const nearSpans = spansAround(config.length, null)
-    const farSpans = spansAround(config.length, access?.junction ?? null)
-    return { z, shoulderZ, vergeZ, edgeZ, period, dashCount, dashX0, nearSpans, farSpans }
-  }, [config, carriageway, access])
+    const full = spansAround(config.length, null)
+    const farEdge = spansAround(config.length, farEdgeGap)
+    return { shoulderZ, vergeZ, edgeZ, period, dashCount, dashX0, full, farEdge }
+  }, [config, carriageway, farEdgeGap])
 
   useLayoutEffect(() => {
     const mesh = dashesRef.current
     if (!mesh) return
     for (let i = 0; i < layout.dashCount; i++) {
-      _position.set(layout.dashX0 + i * layout.period, groundY + PAINT_LIFT, layout.z)
+      _position.set(layout.dashX0 + i * layout.period, groundY + LIFT.paint, 0)
       _matrix.compose(_position, FLAT, _scale)
       mesh.setMatrixAt(i, _matrix)
     }
@@ -200,48 +145,33 @@ export function Highway({ config, groundY, getOpacity, access }: HighwayProps) {
     invalidate()
   }, [layout, groundY, invalidate])
 
-  useEffect(() => {
-    lastOpacity.current = Number.NaN
-  }, [materials])
-
-  useFrame(() => {
-    const opacity = clamp01(getOpacity())
-    if (opacity === lastOpacity.current) return
-    lastOpacity.current = opacity
-    for (const material of Object.values(materials)) material.opacity = opacity
-    if (groupRef.current) groupRef.current.visible = opacity > 0.001
-  })
-
-  const { z, shoulderZ, vergeZ, edgeZ, dashCount, nearSpans, farSpans } = layout
+  const { shoulderZ, vergeZ, edgeZ, dashCount, full, farEdge } = layout
   const { length, shoulderWidth, vergeWidth, markings } = config
 
-  /** A flat strip along X between x0 and x1 at world z, width w (along Z), at lift y. */
-  const strip = (key: string, x0: number, x1: number, zc: number, w: number, lift: number, material: MeshStandardMaterial, order: number) => (
-    <mesh key={key} position={[(x0 + x1) / 2, groundY + lift, zc]} rotation={FLAT_EULER} material={material} renderOrder={order} receiveShadow>
+  /** A flat strip along X between x0 and x1 at slot-local z, width w (along Z), at lift y. */
+  const strip = (key: string, x0: number, x1: number, zc: number, w: number, lift: number, material: MeshStandardMaterial) => (
+    <mesh key={key} name={`highway-${key}`} position={[(x0 + x1) / 2, groundY + lift, zc]} rotation={FLAT_EULER} material={material} receiveShadow>
       <planeGeometry args={[x1 - x0, w]} />
     </mesh>
   )
 
   return (
-    <group ref={groupRef} name="highway" visible={false}>
-      {strip('asphalt', -length / 2, length / 2, z, carriageway, ROAD_LIFT, materials.asphalt, ORDER_SURFACE)}
-      {/* Near side (towards the camera): continuous. Far side: broken where the access road joins. */}
-      {nearSpans.map(([x0, x1], i) => strip(`near-shoulder-${i}`, x0, x1, z + shoulderZ, shoulderWidth, ROAD_LIFT, materials.shoulder, ORDER_SURFACE))}
-      {nearSpans.map(([x0, x1], i) => strip(`near-verge-${i}`, x0, x1, z + vergeZ, vergeWidth, ROAD_LIFT, materials.verge, ORDER_SURFACE))}
-      {nearSpans.map(([x0, x1], i) => strip(`near-edge-${i}`, x0, x1, z + edgeZ, markings.lineWidth, PAINT_LIFT, materials.edgeLine, ORDER_PAINT))}
-      {nearSpans.map(([x0, x1], i) => strip(`far-shoulder-${i}`, x0, x1, z - shoulderZ, shoulderWidth, ROAD_LIFT, materials.shoulder, ORDER_SURFACE))}
-      {nearSpans.map(([x0, x1], i) => strip(`far-verge-${i}`, x0, x1, z - vergeZ, vergeWidth, ROAD_LIFT, materials.verge, ORDER_SURFACE))}
-      {farSpans.map(([x0, x1], i) => strip(`far-edge-${i}`, x0, x1, z - edgeZ, markings.lineWidth, PAINT_LIFT, materials.edgeLine, ORDER_PAINT))}
+    <group name="highway">
+      {strip('asphalt', -length / 2, length / 2, 0, carriageway, LIFT.road, materials.asphalt)}
+      {full.map(([x0, x1], i) => strip(`near-shoulder-${i}`, x0, x1, shoulderZ, shoulderWidth, LIFT.road, materials.shoulder))}
+      {full.map(([x0, x1], i) => strip(`near-verge-${i}`, x0, x1, vergeZ, vergeWidth, LIFT.road, materials.verge))}
+      {full.map(([x0, x1], i) => strip(`near-edge-${i}`, x0, x1, edgeZ, markings.lineWidth, LIFT.paint, materials.edgeLine))}
+      {/* Far side: shoulder and verge stay continuous (the exit road lies on top); only the edge line breaks at the junction. */}
+      {full.map(([x0, x1], i) => strip(`far-shoulder-${i}`, x0, x1, -shoulderZ, shoulderWidth, LIFT.road, materials.shoulder))}
+      {full.map(([x0, x1], i) => strip(`far-verge-${i}`, x0, x1, -vergeZ, vergeWidth, LIFT.road, materials.verge))}
+      {farEdge.map(([x0, x1], i) => strip(`far-edge-${i}`, x0, x1, -edgeZ, markings.lineWidth, LIFT.paint, materials.edgeLine))}
       {dashCount > 0 && (
-        <instancedMesh key={dashCount} ref={dashesRef} name="highway-centre-dashes" args={[undefined, undefined, dashCount]} material={materials.centreLine} renderOrder={ORDER_PAINT} receiveShadow>
+        <instancedMesh key={dashCount} ref={dashesRef} name="highway-centre-dashes" args={[undefined, undefined, dashCount]} material={materials.centreLine} receiveShadow>
           <planeGeometry args={[markings.dashLength, markings.lineWidth]} />
         </instancedMesh>
       )}
-      {accessShape && (
-        <mesh name="highway-access-road" position={[0, groundY + ACCESS_LIFT, 0]} rotation={FLAT_EULER} material={materials.access} renderOrder={ORDER_SURFACE + 0.5} receiveShadow>
-          <shapeGeometry args={[accessShape, 1]} />
-        </mesh>
-      )}
+      <InstancedLightBoxes name="highway-street-light-poles" items={lights.poles} material={materials.pole} geometry={boxGeometry} />
+      <InstancedLightBoxes name="highway-street-light-lamps" items={lights.lamps} material={materials.pole} geometry={boxGeometry} />
     </group>
   )
 }

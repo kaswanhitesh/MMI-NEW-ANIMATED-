@@ -24,8 +24,22 @@ Everything in the 3D scenes is expressed in **metres** in a right-handed, **Y-up
   `departure.turnRadius` (towards +Z, i.e. towards the camera), then drives `departure.straightIn`
   along +X onto the highway, where it ends in the far lane (left-hand traffic) facing +X.
 - During the **city** phase the same path continues along +X for `journey.travel` metres. The city
-  backdrop stands far behind the road, at negative Z, so it never comes between the camera and the
-  vehicle.
+  stands far behind the garage, at negative Z, so it never comes between the camera and the vehicle.
+
+### Environment layout (world)
+
+| Environment | Slot origin (world)      | Extent                                                                 |
+| ----------- | ------------------------ | ---------------------------------------------------------------------- |
+| Garage      | `(0, 0, −26)`            | Facade front plane at z −26; hall to z −66; building x −50 … 35; forecourt apron to z 16 (kerb), x −90 … 90 |
+| Exit road   | `(0, 0, 0)`              | Under the U-turn from the apron kerb (z 16) to the far carriageway edge (z 26.2), x ≈ −35 … −16 |
+| Highway     | `(0, 0, 29.9)`           | Centre line at z 29.9 along X; carriageway z 26.15 … 33.65; verges to z 21.65 and 38.15 |
+| City        | `(0, 0, −95)`            | Industry z −95 … −135, mid-rise z −170 … −290, skyline z −460 … −936; x −1200 … 1500 |
+
+The coupling happens on the apron, 26 m in front of the facade. Each environment's stand-in is
+authored in its slot's LOCAL space (slot origin + rotation about Y), so a slot can be moved or
+rotated, or its stand-in replaced by a GLB authored in the same local frame (see the model
+replacement checklist, section 7). Nothing in the environments moves during the scroll: forward
+travel is the vehicle driving and the camera following it.
 
 ### Yaw convention during the departure
 

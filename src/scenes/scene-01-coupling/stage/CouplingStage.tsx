@@ -1,28 +1,38 @@
 /**
- * Scene 01's R3F stage: background, fog, procedural environment lighting,
- * stage lights, yard floor, the fleet-garage and highway backdrops, the
- * responsive camera rig and the two vehicles. Rendered INSIDE a `SceneCanvas`
- * — it owns no canvas of its own. Every number comes from `SCENE_01_CONFIG`
- * (or the `config` prop) and the resolved `AssemblyLayout`; the vehicles read
- * the per-frame `CouplingPose`, which `PoseResolver` derives from the mutable
+ * Scene 01's R3F stage: background, fog, daylight sky, procedural environment
+ * lighting, stage lights, yard floor, the four replaceable ENVIRONMENT SLOTS —
+ * garage (with its wall sign), exit road, highway, city — the responsive
+ * camera rig and the two vehicles. Rendered INSIDE a `SceneCanvas` — it owns
+ * no canvas of its own. Every number comes from `SCENE_01_CONFIG` (or the
+ * `config` prop) and the resolved `AssemblyLayout`; the vehicles read the
+ * per-frame `CouplingPose`, which `PoseResolver` derives from the mutable
  * `CouplingRig` the scroll timeline tweens (approach positions, departure
- * distance, camera stage, fades).
+ * distance, city travel, camera stage, garage fade-in, daylight).
+ *
+ * The environments are fixed in the world. Forward travel is the vehicle
+ * actually driving and the camera following it, so the garage recedes behind
+ * the combination with correct perspective and parallax instead of sliding.
  */
 import { useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { Color, type Fog } from 'three'
 import { getModelEntry } from '../../../three/assets'
 import type { Vec3 } from '../../../three/assets/types'
 import type { FramedCameraSpec } from '../../../three/camera/types'
 import { useFramedCamera } from '../../../three/camera/useFramedCamera'
+import { AccessRoad } from '../../../three/environment/AccessRoad'
+import { BrandSign } from '../../../three/environment/BrandSign'
 import { CityBackdrop } from '../../../three/environment/CityBackdrop'
+import { DaylightSky } from '../../../three/environment/DaylightSky'
+import { EnvironmentSlot } from '../../../three/environment/EnvironmentSlot'
 import { FleetGarage } from '../../../three/environment/FleetGarage'
 import { Highway } from '../../../three/environment/Highway'
 import { ProceduralEnvironment } from '../../../three/environment/ProceduralEnvironment'
+import { worldToSlot } from '../../../three/environment/slotSpace'
 import { StageLighting } from '../../../three/environment/StageLighting'
 import { YardFloor } from '../../../three/environment/YardFloor'
 import { SCENE_01_CONFIG, type Scene01Config } from '../config'
-import { combinationCentre, createDeparturePath, describeAccessRoad, resolveCouplingPose, type CombinationLengths, type TrailerTracking } from '../departurePath'
+import { combinationCentre, createDeparturePath, describeExitRoad, resolveCouplingPose, type CombinationLengths, type TrailerTracking } from '../departurePath'
 import type { AssemblyLayout } from '../layout'
 import { createPose, type CouplingPose, type CouplingRig } from '../rig'
 import { HydraulicAxleTrailer } from '../vehicles/HydraulicAxleTrailer'
@@ -39,16 +49,17 @@ export interface CouplingStageProps {
 /**
  * Scene fog whose depths follow the responsive camera and the current camera
  * framing (see ./fogDepths.ts), so the subject never sits inside the fog band
- * on portrait viewports or in the wide framings. In the city journey the fog
- * blends to the configured daylight haze (colour and much longer range) with
- * the city's opacity, which gives the skyline its atmospheric depth.
+ * on portrait viewports or in the wide framings. As the daylight comes up
+ * (`rig.atmosphere.daylight`) it blends to the configured haze — lighter and
+ * much longer — which is what reveals the city in the distance and gives the
+ * skyline its atmospheric depth.
  */
 function StageFog({ config, rig }: { config: Scene01Config; rig: CouplingRig }) {
   const size = useThree((state) => state.size)
   const scene = useThree((state) => state.scene)
   const invalidate = useThree((state) => state.invalidate)
   const perStage = useMemo(() => resolveFogDepthsPerStage(config, size.height > 0 ? size.width / size.height : 1), [config, size])
-  const colors = useMemo(() => ({ base: new Color(config.environment.backgroundColor), haze: new Color(config.environment.city.fog.color) }), [config])
+  const colors = useMemo(() => ({ base: new Color(config.environment.backgroundColor), haze: new Color(config.environment.atmosphere.haze.color) }), [config])
   const last = useRef({ near: NaN, far: NaN, haze: NaN })
 
   useEffect(() => {
@@ -61,10 +72,10 @@ function StageFog({ config, rig }: { config: Scene01Config; rig: CouplingRig }) 
     const fog = scene.fog as Fog | null
     if (!fog || !('near' in fog)) return
     const stage = blendFogDepths(perStage, rig.camera.stage)
-    const city = config.environment.city
-    const h = city.enabled ? Math.min(1, Math.max(0, rig.city.opacity)) : 0
-    const near = stage.near + (city.fog.near - stage.near) * h
-    const far = stage.far + (city.fog.far - stage.far) * h
+    const haze = config.environment.atmosphere.haze
+    const h = Math.min(1, Math.max(0, rig.atmosphere.daylight))
+    const near = stage.near + (haze.near - stage.near) * h
+    const far = stage.far + (haze.far - stage.far) * h
     if (near === last.current.near && far === last.current.far && h === last.current.haze) return
     last.current = { near, far, haze: h }
     fog.near = near
@@ -128,35 +139,43 @@ function PoseResolver({ rig, pose, layout, config }: { rig: CouplingRig; pose: C
 }
 
 export function CouplingStage({ rig, pose, layout, config = SCENE_01_CONFIG }: CouplingStageProps) {
+  const env = config.environment
+  const groundY = config.world.groundY
   const shadowCentre = useMemo<Vec3>(
-    () => [
-      (layout.pullerFinal[0] + layout.trailerFinal[0]) / 2,
-      config.world.groundY,
-      (layout.pullerFinal[2] + layout.trailerFinal[2]) / 2,
-    ],
-    [layout, config.world.groundY],
+    () => [(layout.pullerFinal[0] + layout.trailerFinal[0]) / 2, groundY, (layout.pullerFinal[2] + layout.trailerFinal[2]) / 2],
+    [layout, groundY],
   )
 
-  // The paved yard exit follows the departure path from behind the trailer to the highway's far carriageway edge.
-  const access = useMemo(() => {
-    const hw = config.environment.highway
-    const trailer = getModelEntry(config.models.trailer)
-    const behindTrailer = layout.trailerFinal[0] + (trailer.footprint.length / 2) * config.models.scale + hw.access.rearMargin
-    const rearX = hw.access.runToRoadEnd ? Math.max(behindTrailer, hw.length / 2) : behindTrailer
-    const joinZ = hw.centreZ - (hw.lanes * hw.laneWidth) / 2
-    return describeAccessRoad(layout.pullerFinal, config.departure, hw.access.width, rearX, joinZ, hw.access.overlap)
-  }, [config, layout])
+  // Exit road: the U-turn's paved band in WORLD space, clipped at the apron kerb (garage frame) and at the far
+  // carriageway edge (highway frame), then mapped into the road slot. It also tells the garage where to break its
+  // kerb and the highway where to break its far edge line.
+  const exitRoad = useMemo(() => {
+    const hw = env.highway
+    return describeExitRoad(
+      layout.pullerFinal,
+      config.departure,
+      env.road.width,
+      env.road.overlap,
+      { slot: env.garage.slot, apronFront: env.garage.apron.front, kerbWidth: env.garage.apron.kerb.width },
+      { slot: hw.slot, carriagewayHalfWidth: (hw.lanes * hw.laneWidth) / 2 },
+    )
+  }, [env, layout, config.departure])
+  const roadOutline = useMemo(() => exitRoad.outline.map((p) => worldToSlot(env.road.slot, p)), [exitRoad, env.road.slot])
+  const kerbGaps = useMemo<ReadonlyArray<readonly [number, number]>>(
+    () => (env.road.enabled && exitRoad.kerbGap ? [[exitRoad.kerbGap[0] - 0.1, exitRoad.kerbGap[1] + 0.1]] : []),
+    [env.road.enabled, exitRoad],
+  )
+  const farEdgeGap = env.road.enabled ? exitRoad.junction : null
 
   // Stable identity: FleetGarage re-clones its fade materials whenever this object changes.
   const garageFleet = useMemo(
     () => ({ puller: getModelEntry(config.models.puller), trailer: getModelEntry(config.models.trailer), sceneScale: config.models.scale }),
     [config],
   )
-
-  // Street lights never stand in the access road's junction mouth.
-  const cityLightGaps = useMemo(() => (access.junction ? [access.junction] : []), [access])
-  // The yard floor takes on a daylight ground tone together with the city.
-  const groundBlend = useMemo(() => ({ color: config.environment.city.groundColor, getBlend: () => rig.city.opacity }), [config, rig])
+  const getGarageOpacity = useCallback(() => rig.garage.opacity, [rig])
+  const getDaylight = useCallback(() => rig.atmosphere.daylight, [rig])
+  // The yard floor takes on a daylight ground tone together with the sky and haze.
+  const groundBlend = useMemo(() => ({ color: env.atmosphere.groundColor, getBlend: getDaylight }), [env.atmosphere.groundColor, getDaylight])
 
   // Camera follow: the combination's centre while coupled at rest is the reference the wide framing tracks from.
   const lengths = useMemo<CombinationLengths>(
@@ -189,35 +208,65 @@ export function CouplingStage({ rig, pose, layout, config = SCENE_01_CONFIG }: C
     [pose, lengths, rest],
   )
 
+  /** Ground height in a slot's local space. */
+  const localGround = (slot: { position: Vec3 }) => groundY - slot.position[1]
+
   return (
     <>
-      <color attach="background" args={[config.environment.backgroundColor]} />
+      <color attach="background" args={[env.backgroundColor]} />
       <StageFog config={config} rig={rig} />
+      <DaylightSky sky={env.atmosphere.sky} getDaylight={getDaylight} />
       <ProceduralEnvironment intensity={config.lighting.environmentIntensity} />
       {/* Shadows (key-light frustum + contact-shadow plane) follow the combination's centre, so they stay compact and crisp. */}
       <StageLighting lighting={config.lighting} shadowCentre={shadowCentre} getShadowOffset={getShadowOffset} />
-      <YardFloor
-        environment={config.environment}
-        groundY={config.world.groundY}
-        shadowCentre={shadowCentre}
-        getMarkingsOpacity={() => 1 - rig.highway.opacity}
-        getShadowOffset={getShadowOffset}
-        groundBlend={groundBlend}
-      />
-      {config.environment.garage.enabled && (
-        <FleetGarage
-          config={config.environment.garage}
-          groundY={config.world.groundY}
-          fleet={garageFleet}
-          getOpacity={() => rig.garage.opacity}
+      <YardFloor environment={env} groundY={groundY} shadowCentre={shadowCentre} getShadowOffset={getShadowOffset} groundBlend={groundBlend} />
+
+      {/* Environment slots: independent, replaceable, fixed in the world. */}
+      {env.garage.enabled && (
+        <EnvironmentSlot
+          name="garage"
+          slot={env.garage.slot}
+          showBounds={env.showSlotBounds}
+          getOpacity={getGarageOpacity}
+          placeholder={
+            <FleetGarage
+              config={env.garage}
+              groundY={localGround(env.garage.slot)}
+              fleet={garageFleet}
+              getOpacity={getGarageOpacity}
+              getDaylight={getDaylight}
+              kerbGaps={kerbGaps}
+            />
+          }
+        >
+          {env.garage.sign.enabled && <BrandSign config={env.garage.sign} groundY={localGround(env.garage.slot)} getOpacity={getGarageOpacity} />}
+        </EnvironmentSlot>
+      )}
+      {env.road.enabled && (
+        <EnvironmentSlot
+          name="road"
+          slot={env.road.slot}
+          showBounds={env.showSlotBounds}
+          placeholder={<AccessRoad outline={roadOutline} groundY={localGround(env.road.slot)} color={env.road.color} grain={env.road.grain} />}
         />
       )}
-      {config.environment.highway.enabled && (
-        <Highway config={config.environment.highway} groundY={config.world.groundY} getOpacity={() => rig.highway.opacity} access={access} />
+      {env.highway.enabled && (
+        <EnvironmentSlot
+          name="highway"
+          slot={env.highway.slot}
+          showBounds={env.showSlotBounds}
+          placeholder={<Highway config={env.highway} groundY={localGround(env.highway.slot)} farEdgeGap={farEdgeGap} />}
+        />
       )}
-      {config.environment.city.enabled && (
-        <CityBackdrop config={config.environment.city} groundY={config.world.groundY} getOpacity={() => rig.city.opacity} lightGaps={cityLightGaps} />
+      {env.city.enabled && (
+        <EnvironmentSlot
+          name="city"
+          slot={env.city.slot}
+          showBounds={env.showSlotBounds}
+          placeholder={<CityBackdrop config={env.city} groundY={localGround(env.city.slot)} />}
+        />
       )}
+
       <PoseResolver rig={rig} pose={pose} layout={layout} config={config} />
       <CameraRig spec={config.camera} rig={rig} pose={pose} lengths={lengths} rest={rest} />
       <PullerTruck pose={pose} layout={layout} config={config} />
