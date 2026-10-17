@@ -193,8 +193,8 @@ Engine-layer pieces (`SceneCanvas`, `useFramedCamera`, `StageLighting`, `YardFlo
   line parallel to X (chassis rails, deck, garage beams, road edges) projects exactly horizontal. The
   composition is moved by panning the camera parallel to the image plane: `targetOffset` moves the
   target in world space and `screenOffset` places the target at a given screen position (normalised
-  device coordinates). The camera is never turned to reframe. `validateScene01Config` rejects a
-  framing whose direction has a non-zero x.
+  device coordinates). The camera is never turned to reframe. `validateScene01Config` warns (in
+  development) about any framing whose direction has a non-zero x.
 - **Departure** — `departurePath.ts` is pure: a straight, a 180° left turn of `departure.turnRadius`
   and a straight onto the highway. The puller rides the path; the trailer is pinned at its kingpin to
   the puller's fifth wheel (manifest anchors) and points from a rear reference point further back along

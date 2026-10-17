@@ -81,7 +81,7 @@ towards the camera and a **fit width / fit height** in metres. The actual distan
 runtime for the viewport's aspect ratio, so phones (portrait) and ultra-wides both keep the whole
 combination in frame. The named framings are walked in `camera.sequence` order by one tweened
 "stage" value: `base` (approach), `heroHold` (push-in while coupled), `wide` (establishing shot that
-holds the whole U-turn), `highway` (combination on the right, left ~40% clear) and `city` (final shot,
+holds the whole U-turn), `highway` (combination on the right, left ~38% clear) and `city` (final shot,
 combination in the lower third on the left, right ~40–45% clear).
 
 Every framing's direction has **x = 0**: the camera looks straight along −Z, tilted down only, with

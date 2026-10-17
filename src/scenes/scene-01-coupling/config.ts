@@ -67,8 +67,8 @@ export interface Scene01Config {
   }
   /**
    * Camera: `target` ≈ centre of the coupled combination. Framings in sequence order: `base` (approach),
-   * `heroHold` (push-in while coupled), `wide` (establishing shot before departure), `highway` (final
-   * right-aligned composition). The timeline tweens `rig.camera.stage` through them; nothing cuts.
+   * `heroHold` (push-in while coupled), `wide` (establishing shot and departure), `highway` (right-aligned hold),
+   * `city` (bottom-left journey). The timeline tweens `rig.camera.stage` through them; nothing cuts.
    */
   camera: FramedCameraSpec<Scene01CameraFraming>
   /** The departure manoeuvre the coupled combination performs after the establishing shot. */

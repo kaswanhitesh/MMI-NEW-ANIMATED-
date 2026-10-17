@@ -124,13 +124,15 @@ function CameraRig({
 function PoseResolver({ rig, pose, layout, config }: { rig: CouplingRig; pose: CouplingPose; layout: AssemblyLayout; config: Scene01Config }) {
   const path = useMemo(() => createDeparturePath(layout.pullerFinal, config.departure), [layout, config.departure])
   const tracking = useMemo<TrailerTracking>(() => {
-    const scale = config.models.scale
+    const hitchOffset = getModelEntry(config.models.puller).anchors.coupling[0] * config.models.scale
     return {
-      hitchOffset: getModelEntry(config.models.puller).anchors.coupling[0] * scale,
-      kingpinOffset: -getModelEntry(config.models.trailer).anchors.coupling[0] * scale,
+      hitchOffset,
+      // Measured from the resolved rest layout rather than the anchors alone, so the first frame of the departure
+      // reproduces the coupled rest pose exactly, whatever `assembly.connectedGap` or a final-position override says.
+      kingpinOffset: layout.trailerFinal[0] - layout.pullerFinal[0] - hitchOffset,
       trackingLength: config.departure.trailerTrackingLength,
     }
-  }, [config])
+  }, [config, layout])
 
   useFrame(() => {
     resolveCouplingPose(rig, path, tracking, pose)

@@ -85,6 +85,8 @@ function EnvironmentModel({
     return () => {
       fadeRef.current?.restore()
       fadeRef.current = null
+      // The scene belongs to the loader cache: leave it as it was found.
+      scene.visible = true
     }
   }, [scene, model.castShadow, model.receiveShadow, fadeRenderOrder, invalidate, wantsFade])
 

@@ -2,7 +2,8 @@
  * Scene 01 timeline hook.
  *
  * Builds the ONE scroll-scrubbed GSAP timeline that drives the coupling rig —
- * puller / trailer positions, the camera hero blend and the overlay opacities —
+ * puller / trailer positions, the departure and travel distances, the camera
+ * framing stage, the garage fade-in, the daylight and the overlay opacities —
  * and binds it to a pinned ScrollTrigger on the scene section. Everything
  * happens inside a `gsap.matchMedia()` context keyed on `prefers-reduced-motion`,
  * so users who ask for reduced motion get the completed combination rendered
@@ -27,7 +28,7 @@ import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { gsap } from '../../animation/gsap'
 import { createPinnedScrubTimeline, getPhaseAtProgress } from '../../animation/scrollTimeline'
 import { FULL_MOTION_QUERY, REDUCED_MOTION_QUERY } from '../../animation/useReducedMotion'
-import { SCENE_01_CONFIG, SCENE_01_PHASE_ORDER, type PhaseWindow, type Scene01Config, type Scene01PhaseName } from './config'
+import { SCENE_01_CONFIG, SCENE_01_PHASE_ORDER, type PhaseWindow, type Scene01CameraFraming, type Scene01Config, type Scene01PhaseName } from './config'
 import type { AssemblyLayout } from './layout'
 import { createDeparturePath } from './departurePath'
 import { assignRig, createFinalRig, createInitialRig, type CouplingPose, type CouplingRig } from './rig'
@@ -86,7 +87,7 @@ declare global {
   }
 }
 
-/** Fraction of the heroHold phase the camera push-in occupies (it settles before the phase ends). */
+/** Fraction of the coupling-hold phase the camera push-in occupies (it settles before the phase ends). */
 const HERO_DOLLY_PORTION = 0.75
 /** Fraction of the heroHold phase that elapses before the closing caption starts fading in. */
 const CAPTION_DELAY_PORTION = 0.15
@@ -135,6 +136,8 @@ function populateTimeline(tl: gsap.core.Timeline, rig: CouplingRig, layout: Asse
   const ES = phases.establish
   const DP = phases.departure
   const path = createDeparturePath(layout.pullerFinal, departure)
+  // Camera stage of a named framing (its index in camera.sequence; validateScene01Config checks the order).
+  const stageOf = (name: Scene01CameraFraming): number => Math.max(0, config.camera.sequence.indexOf(name))
 
   // Mirrors progress onto the rig and pins the total duration to 1 (timeline time == scroll progress).
   tl.to(rig, { progress: 1, duration: 1, ease: 'none' }, 0)
@@ -160,7 +163,7 @@ function populateTimeline(tl: gsap.core.Timeline, rig: CouplingRig, layout: Asse
   }
 
   // Coupling hold: both vehicles stay put; a subtle camera push-in (stage 0 → 1), then the caption fades in.
-  tl.to(rig.camera, { stage: 1, duration: len(CH) * HERO_DOLLY_PORTION, ease: easing.heroDolly }, CH.start)
+  tl.to(rig.camera, { stage: stageOf('heroHold'), duration: len(CH) * HERO_DOLLY_PORTION, ease: easing.heroDolly }, CH.start)
   tl.to(
     rig.overlay,
     { captionOpacity: 1, duration: len(CH) * overlay.captionFadeInPortion, ease: easing.overlay },
@@ -168,7 +171,7 @@ function populateTimeline(tl: gsap.core.Timeline, rig: CouplingRig, layout: Asse
   )
 
   // Establishing shot: the camera pulls out to the wide framing (stage 1 → 2); the caption leaves with it.
-  tl.to(rig.camera, { stage: 2, duration: len(ES), ease: easing.establish }, ES.start)
+  tl.to(rig.camera, { stage: stageOf('wide'), duration: len(ES), ease: easing.establish }, ES.start)
   tl.to(rig.overlay, { captionOpacity: 0, duration: len(ES) * overlay.captionFadeOutPortion, ease: easing.overlay }, ES.start)
 
   // Departure: ONE scalar — distance along the path — drives both vehicles (see departurePath.ts), with a slow
@@ -180,7 +183,7 @@ function populateTimeline(tl: gsap.core.Timeline, rig: CouplingRig, layout: Asse
   const revealStart = DP.start + len(DP) * departure.revealStart
   tl.to(rig.atmosphere, { daylight: 1, duration: Math.max(1e-4, DP.end - revealStart), ease: easing.daylight }, revealStart)
   const settleStart = DP.start + len(DP) * departure.cameraSettleStart
-  tl.to(rig.camera, { stage: 3, duration: Math.max(1e-4, DP.end - settleStart), ease: easing.cameraSettle }, settleStart)
+  tl.to(rig.camera, { stage: stageOf('highway'), duration: Math.max(1e-4, DP.end - settleStart), ease: easing.cameraSettle }, settleStart)
 
   // Highway hold: nothing moves.
 
@@ -190,7 +193,7 @@ function populateTimeline(tl: gsap.core.Timeline, rig: CouplingRig, layout: Asse
   const CI = phases.city
   const { journey } = config
   tl.to(rig.city, { travel: journey.travel, duration: len(CI), ease: easing.cityTravel }, CI.start)
-  tl.to(rig.camera, { stage: 4, duration: Math.max(1e-4, len(CI) * journey.cameraPortion), ease: easing.cityCamera }, CI.start)
+  tl.to(rig.camera, { stage: stageOf('city'), duration: Math.max(1e-4, len(CI) * journey.cameraPortion), ease: easing.cityCamera }, CI.start)
 
   // City hold: nothing moves.
 }

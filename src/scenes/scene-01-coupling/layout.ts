@@ -9,7 +9,7 @@ import { MODEL_MANIFEST } from '../../three/assets/modelManifest'
 import type { ModelManifestEntry, Vec3 } from '../../three/assets/types'
 import { worldToSlot } from '../../three/environment/slotSpace'
 import { SCENE_01_CONFIG, SCENE_01_PHASE_ORDER, type Scene01Config } from './config'
-import { describeExitRoad } from './departurePath'
+import { createDeparturePath, describeExitRoad } from './departurePath'
 
 export interface AssemblyLayout {
   couplingPoint: Vec3
@@ -118,7 +118,10 @@ export function validateScene01Config(config: Scene01Config = SCENE_01_CONFIG, m
   const j = config.journey
   if (!(j.travel >= 0)) warnings.push('journey.travel must be ≥ 0.')
   if (!(j.cameraPortion > 0 && j.cameraPortion <= 1)) warnings.push('journey.cameraPortion must be in (0, 1].')
-  if (config.camera.sequence.indexOf('highway') < 0 || config.camera.sequence.indexOf('city') !== config.camera.sequence.indexOf('highway') + 1) warnings.push("camera.sequence must contain 'highway' followed by 'city' (the timeline tweens the stage 3 → 4).")
+  // The timeline walks the stage through these framings in this order (it looks each one up by name).
+  const order = ['base', 'heroHold', 'wide', 'highway', 'city'] as const
+  const indices = order.map((name) => config.camera.sequence.indexOf(name))
+  if (indices.some((i, k) => i < 0 || (k > 0 && i !== indices[k - 1] + 1))) warnings.push(`camera.sequence must list ${order.join(', ')} consecutively in that order.`)
   // Level side views: a framing with a sideways direction component tilts every line along the travel axis.
   for (const name of config.camera.sequence) {
     if (Math.abs(config.camera.framings[name].direction[0]) > 1e-9) warnings.push(`camera.framings.${name}.direction[0] should be 0 for a level side view (lines along X would slant).`)
@@ -151,6 +154,18 @@ export function validateScene01Config(config: Scene01Config = SCENE_01_CONFIG, m
     for (const [label, p] of [['pullerStart', layout.pullerStart], ['trailerStart', layout.trailerStart], ['pullerFinal', layout.pullerFinal], ['trailerFinal', layout.trailerFinal]] as const) {
       const [lx, lz] = worldToSlot(g.slot, [p[0], p[2]])
       if (lx < g.apron.left || lx > g.apron.right || lz < 0 || lz > g.apron.front) warnings.push(`${label} is not on the garage apron (garage-local x ${lx.toFixed(1)}, z ${lz.toFixed(1)}).`)
+    }
+  }
+  // The departure must end in the highway's far lane, heading along the road (the highway slot can be moved).
+  if (env.highway.enabled) {
+    const hw = env.highway
+    const path = createDeparturePath(layout.pullerFinal, dep)
+    const end = { x: 0, z: 0, yaw: 0 }
+    path.at(path.totalLength, end)
+    const [, lz] = worldToSlot(hw.slot, [end.x, end.z])
+    const heading = Math.atan2(Math.sin(end.yaw - (Math.PI - hw.slot.rotationY)), Math.cos(end.yaw - (Math.PI - hw.slot.rotationY)))
+    if (!(lz < 0 && lz > -hw.laneWidth) || Math.abs(heading) > 1e-3) {
+      warnings.push(`The departure ends at highway-local z ${lz.toFixed(2)} (far lane is ${(-hw.laneWidth).toFixed(2)}…0) — move environment.highway.slot or adjust the departure.`)
     }
   }
   if (env.road.enabled) {
