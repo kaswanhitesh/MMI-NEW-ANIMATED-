@@ -1,18 +1,21 @@
 /**
- * Facility sign mounted on the garage's branding wall: a framed board on
- * stand-off brackets with the company name lettered on its face, and
- * gooseneck floodlights above it — the way a real industrial site sign is
- * fixed to cladding. It is an ATTACHMENT of the garage slot (slot-local
- * coordinates, facade plane at z = 0), so it moves with the garage and stays
- * when the procedural hall is replaced by a detailed model.
+ * Facility sign mounted on a building's wall (the garage's branding wall, the
+ * factory's front): a framed board on stand-off brackets with the company name
+ * lettered on its face, and gooseneck floodlights above it — the way a real
+ * industrial site sign is fixed to cladding. It is an ATTACHMENT of its
+ * building's slot (slot-local coordinates, facade plane at z = 0), so it moves
+ * with the building and stays when the procedural building is replaced by a
+ * detailed model.
  *
  * The lettering is drawn once into a canvas texture from `config.text` — the
  * exact company name, no logo — in the site's own font stack, auto-fitted to
  * the board with even letter spacing (drawn glyph by glyph, which works in
  * every browser). It is redrawn once the document's fonts have loaded, so a
  * brand web font declared later is picked up. The board is lit by the scene
- * like the wall behind it and sits in the same fog, so it belongs to the
- * building rather than floating over it.
+ * like the wall behind it, plus a floodlit (emissive) term from its lamps
+ * (`floodlight`) so the lettering keeps its contrast in a dim yard, and it
+ * sits in the same fog, so it belongs to the building rather than floating
+ * over it.
  *
  * Fading: `getOpacity()` (the garage's) is written to every material each
  * rendered frame; materials keep depth writes and draw before the garage.
@@ -29,6 +32,8 @@ export interface BrandSignProps {
   groundY: number
   /** Read every frame; 0 = invisible, 1 = fully visible. Clamped. */
   getOpacity: () => number
+  /** Name of the sign's group (default `brand-sign`); give each sign in a scene its own. */
+  name?: string
 }
 
 /** Draws before the garage's own parts (which start at −14.5). */
@@ -92,7 +97,7 @@ function paintFace(canvas: HTMLCanvasElement, config: BrandSignConfig): void {
   ctx.fillRect((w - ruleWidth) / 2, baseline + size * 0.22, ruleWidth, ruleHeight)
 }
 
-export function BrandSign({ config, groundY, getOpacity }: BrandSignProps) {
+export function BrandSign({ config, groundY, getOpacity, name = 'brand-sign' }: BrandSignProps) {
   const groupRef = useRef<Group>(null)
   const last = useRef(Number.NaN)
   const invalidate = useThree((state) => state.invalidate)
@@ -130,12 +135,14 @@ export function BrandSign({ config, groundY, getOpacity }: BrandSignProps) {
     const make = (color: string, extra: Partial<MeshStandardMaterial> = {}) =>
       new MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.3, transparent: true, opacity: 0, depthWrite: true, ...extra })
     return {
-      face: make('#ffffff', { map: texture, roughness: 0.6, metalness: 0.05 }),
+      // The floodlit face: the lettering texture also drives the emissive term, so the light face glows and the
+      // lettering stays dark (or the reverse for a dark board) — contrast that survives a dim yard and its fog.
+      face: make('#ffffff', { map: texture, emissive: new Color('#ffffff'), emissiveMap: texture, emissiveIntensity: config.floodlight, roughness: 0.6, metalness: 0.05 }),
       frame: make(config.colors.frame, { roughness: 0.45, metalness: 0.6 }),
       bracket: make(config.colors.bracket, { roughness: 0.5, metalness: 0.6 }),
       lamp: make(config.colors.lamp, { emissive: new Color(config.colors.lamp), emissiveIntensity: config.lamps.intensity, roughness: 0.4 }),
     }
-  }, [texture, config.colors, config.lamps.intensity])
+  }, [texture, config.colors, config.lamps.intensity, config.floodlight])
   const box = useMemo(() => new BoxGeometry(1, 1, 1), [])
 
   useEffect(() => () => texture.dispose(), [texture])
@@ -165,7 +172,7 @@ export function BrandSign({ config, groundY, getOpacity }: BrandSignProps) {
   const armLength = 1.1
 
   return (
-    <group ref={groupRef} name="brand-sign" position={[centre[0], groundY + centre[1], 0]} visible={false}>
+    <group ref={groupRef} name={name} position={[centre[0], groundY + centre[1], 0]} visible={false}>
       <mesh name="brand-sign-board" geometry={box} material={boardMaterials} position={[0, 0, zBoard]} scale={[w, h, d]} renderOrder={SIGN_ORDER} />
       {/* Slim outer frame proud of the face: top, bottom, left, right. */}
       <mesh geometry={box} material={materials.frame} position={[0, h / 2 + frameT / 2, zBoard]} scale={[w + frameT * 2, frameT, d + 0.04]} renderOrder={SIGN_ORDER} />

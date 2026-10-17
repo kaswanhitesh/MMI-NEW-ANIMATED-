@@ -41,6 +41,9 @@ src/three/                  Scene-agnostic 3D engine layer — nothing here know
                             EnvironmentSlot (replaceable environment groups) and the procedural
                             stand-ins: FleetGarage + BrandSign, AccessRoad, Highway, CityBackdrop;
                             DaylightSky; slotSpace (world ↔ slot-local maths); roadSurface (layers)
+  industrial/               Contracts (types.ts) and procedural stand-ins for heavy industry: IndustrialZone,
+                            GeminiFactory (+ factoryLayout), PressureVessel (+ vesselGeometry), VesselSaddle,
+                            OverheadCrane, LiftingRig — each in its own local frame, animated ones fed a pose
 
 src/animation/              gsap.ts (single registration), useReducedMotion, scrollTimeline helpers
 
@@ -48,8 +51,10 @@ src/scenes/                 Cinematic scenes
   types.ts                  SceneModule / SceneDefinition contracts and the lifecycle
   registry.ts               SCENE_REGISTRY: Scene 01 implemented, Scenes 02–05 planned (never loaded)
   scene-01-coupling/        config.ts (ALL numbers) · layout.ts (derived positions + validation) ·
-                            rig.ts (mutable animation state) · useCouplingTimeline.ts (GSAP) ·
-                            stage/ (R3F contents) · vehicles/ (PullerTruck, HydraulicAxleTrailer) ·
+                            rig.ts (mutable animation state) · departurePath.ts (journey and parking paths,
+                            trailer tracking) · loading.ts (heavy-lift choreography) · useCouplingTimeline.ts
+                            (GSAP) · stage/ (R3F contents; FactorySequence.tsx for the factory, crane, cargo
+                            and saddles) · vehicles/ (PullerTruck, HydraulicAxleTrailer) ·
                             CouplingScene.tsx (the pinned section) · index.ts (SceneModule)
 docs/                       This file, coordinate system, model replacement checklist
 ```
@@ -62,6 +67,8 @@ scroll position
    ▼
 GSAP timeline (duration 1, labels per phase)       ← config.phases / easing
    │  initial → approach → couplingHold → establish → departure → highwayHold → city → cityHold
+   │  → industrial → factoryEntry → parking → craneApproach → rigging → lift → transfer → lowering
+   │  → release → loadedHold
    │  approach: puller and trailer tween to their connected positions together; from 40% of it the
    │            fleet garage fades 0 → 1, reaching 1 as they arrive — it never fades out afterwards
    │  couplingHold / establish: camera stage 0 → 1 → 2 (push-in, then wide pull-out); caption in, then out
@@ -69,21 +76,35 @@ GSAP timeline (duration 1, labels per phase)       ← config.phases / easing
    │             settles on the highway; atmosphere.daylight 0 → 1 from departure.revealStart to its end
    │  city: city.travel 0 → journey.travel extends the same path along the highway; camera stage 3 → 4
    │        (the city framing follows the combination, so the garage slides away behind it)
+   │  industrial: industrial.travel 0 → (stop − city end) continues along the lane to the stop beyond the
+   │              factory gate; camera stage 4 → 5 (static entry shot of the factory front)
+   │  factoryEntry + parking: ONE scalar, parking.reverse 0 → parking path length, reverses the
+   │              combination into bay A; camera 5 → 6 → 7 (entry shot → doorway → loading composition)
+   │  craneApproach … release: one loading stage scalar per phase (approach, attach + tension, lift,
+   │              transfer, lower, release), each 0 → 1; camera 7 → 8 (lift framing) as the crane
+   │              approaches and 8 → 7 as the rigging is released
    │  tweens plain numbers on the rig
    ▼
-CouplingRig { puller, trailer, departure.distance, city.travel, atmosphere.daylight, camera.stage,
-              garage.opacity, overlay.* }
+CouplingRig { puller, trailer, departure.distance, city.travel, industrial.travel, parking.reverse,
+              loading.*, atmosphere.daylight, camera.stage, garage.opacity, overlay.* }
    │  read every frame (demand frameloop; the timeline calls invalidate())
    ▼
 PoseResolver (departurePath.ts): rig → CouplingPose { puller, trailer: x, z, yaw }
    │  before the departure the approach positions pass straight through; during it the puller rides the
-   │  path and the trailer's kingpin stays pinned to the fifth wheel while its rear tracks the path
+   │  path and the trailer's kingpin stays pinned to the fifth wheel while its rear tracks the path;
+   │  once parking.reverse > 0 the same tracking runs on the parking path (both paths meet at the stop)
+LoadingResolver (loading.ts): rig.loading → LoadingPose { cargo pose, crane pose, rig pose }
+   │  the cargo is placed from its rest / lift / deck positions, never parented to the trailer or crane;
+   │  the slings are solved to hang from the vessel's lug pins while attached
    ▼
 R3F stage: vehicle groups copy the pose; useFramedCamera walks base → heroHold → wide → highway → city;
            fog follows the framing, then blends to the daylight haze; the sky, apron and ground follow the
            daylight; the garage (and its sign) read their opacity; the key light and contact shadows
            follow the combination; overlay opacities are written to the DOM hero / caption elements
-           environment slots: garage · road · highway · city — fixed in the world, never animated
+           environment slots: garage · road · highway · city · industrial · factory · workpieces — fixed
+           in the world, never animated; crane (bridge, trolley, hook from the crane pose), lifting rig,
+           cargo (its slot frame follows the cargo pose), ground saddles, trailer saddles (ride with the
+           trailer) — see stage/FactorySequence.tsx
 ```
 
 The rig is the only bridge between the DOM world (GSAP) and the canvas world (three.js). The
@@ -177,8 +198,10 @@ Engine-layer pieces (`SceneCanvas`, `useFramedCamera`, `StageLighting`, `YardFlo
 - **The wall sign** — `BrandSign.tsx` mounts a framed board on stand-off brackets with gooseneck
   lamps on the branding wall, lettered with the exact company name from `garage.sign.text` (drawn
   once into a canvas texture in the site's font stack, auto-fitted and evenly tracked; no logo). It
-  is placed so that, with the level cameras, it is fully in frame in the establishing shot, through
-  the U-turn and at the highway hold on screens of aspect ≥ 1.7, and out of the coupling shots.
+  is placed so that, with the level cameras, it is fully in frame in the establishing shot and
+  through the U-turn on landscape screens, and at the highway hold from aspect ≈ 1.74; below that the
+  hold cuts it at the left edge, and on phones it is too small to read (a known limitation). On
+  ultra-wide screens a corner of the board enters the frame during the coupling hold.
 - **Leaving the garage** — nothing in the environment moves or fades during the journey. The vehicle
   drives off the apron and along the highway, and the camera follows it, so the garage recedes behind
   it with true perspective and parallax (and slides out of frame during the city travel); scrolling
@@ -216,10 +239,13 @@ Engine-layer pieces (`SceneCanvas`, `useFramedCamera`, `StageLighting`, `YardFlo
   separated by height so nothing coplanar can z-fight (`roadSurface.ts`): floor (pushed back with a
   polygon offset), apron 2 mm, yard markings 4 mm, highway surfaces 7 mm, exit road 11 mm, paint
   15 mm, contact shadows 20 mm.
-- **Reduced motion** — `gsap.matchMedia` renders a completed composition statically with all copy
-  visible; no pin, no scrub. `reducedMotion.frame` picks it: `'highway'` (the default: combination on
-  the right, the garage and its sign behind it in daylight) or `'city'`. The default is the highway frame because the caption sits bottom-left, which
-  is where the city composition puts the vehicle. CSS transitions are also disabled under the same media query.
+- **Reduced motion** — `gsap.matchMedia` renders one held composition statically with all copy
+  visible; no pin, no scrub. `reducedMotion.frame` picks it: `'coupled'` (the default: the coupling
+  hold in the garage), `'highway'`, `'city'` or `'loaded'`. Both the hero copy (top left) and the
+  caption (bottom left) are on screen at once, so the default is the shot the caption was composed
+  for, with the dark garage behind the headline; the highway hold puts the garage interior and its
+  sign behind the headline, and the city and loaded compositions put the vehicle under the caption.
+  CSS transitions are also disabled under the same media query.
 - **No WebGL** — `SceneCanvas` probes first and renders a same-size text fallback; a runtime
   renderer failure hits the canvas error boundary and shows the same fallback.
 - **Resize** — ScrollTrigger refreshes with `invalidateOnRefresh`; mobile address-bar resizes are

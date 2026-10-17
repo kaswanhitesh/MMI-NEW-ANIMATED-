@@ -20,6 +20,10 @@
  * way a steered modular trailer follows its tractor — to the kingpin. The two
  * bodies therefore stay coupled through the turn with a realistic
  * articulation angle and no interpenetration.
+ *
+ * After the city and the industrial area (both further along the final
+ * straight) the combination reverses into the factory along a second path,
+ * the PARKING PATH (`createParkingPath`), with the same tracking.
  */
 import type { Vec3 } from '../../three/assets/types'
 import { clipPolygon, crossingRange, worldToSlot } from '../../three/environment/slotSpace'
@@ -86,14 +90,93 @@ const _p: PathPoint = { x: 0, z: 0, yaw: 0 }
 const _a: PathPoint = { x: 0, z: 0, yaw: 0 }
 
 /**
+ * The PARKING PATH into bay A of the factory, parameterised from the parked
+ * puller outwards — the way the combination would drive OUT: `bayStraight`
+ * metres ahead from the parked pose (out through the door), a left turn of
+ * `turnRadius` until it heads +X along the highway, then `roadStraight`
+ * metres along the road. The combination arrives along the highway, stops at
+ * the path's end and REVERSES along it (arc length counting down), so the
+ * same trailer tracking used for the departure places the trailer — leading
+ * through the door — on the path behind the puller. Negative arc lengths
+ * extend the bay straight backwards (deeper into the bay); arc lengths past
+ * the end continue along the road.
+ */
+export function createParkingPath(cfg: Scene01Config['parking']): DeparturePath {
+  const [px, , pz] = cfg.pullerPosition
+  const yaw0 = cfg.yaw
+  // Left turn (yaw increases) until the heading is +X (yaw π).
+  const turn = Math.PI - yaw0
+  const a = cfg.bayStraight
+  const R = cfg.turnRadius
+  const arcLength = R * turn
+  const totalLength = a + arcLength + cfg.roadStraight
+  const fx = -Math.cos(yaw0)
+  const fz = Math.sin(yaw0)
+  // Turn centre: R to the left of the arc's start (left of heading θ is (sin θ, cos θ)).
+  const cx = px + a * fx + R * Math.sin(yaw0)
+  const cz = pz + a * fz + R * Math.cos(yaw0)
+  // End of the arc (heading +X): the centre minus R·left(π) = (cx, cz + R).
+  const ex = cx
+  const ez = cz + R
+  return {
+    totalLength,
+    at(s, out) {
+      if (s <= a) {
+        out.x = px + s * fx
+        out.z = pz + s * fz
+        out.yaw = yaw0
+      } else if (s <= a + arcLength) {
+        const theta = yaw0 + (s - a) / R
+        out.x = cx - R * Math.sin(theta)
+        out.z = cz - R * Math.cos(theta)
+        out.yaw = theta
+      } else {
+        out.x = ex + (s - a - arcLength)
+        out.z = ez
+        out.yaw = Math.PI
+      }
+      return out
+    },
+  }
+}
+
+/** Both paths of the journey and the points where they meet. */
+export interface JourneyGeometry {
+  departure: DeparturePath
+  parking: DeparturePath
+  /** Puller at the end of the city journey (departure path end + city travel). */
+  cityEnd: PathPoint
+  /** Puller at the stop beyond the factory gate where the reverse begins (the parking path's far end). */
+  stop: PathPoint
+  /** Metres from `cityEnd` to `stop` along the highway: the industrial phase's travel. */
+  industrialTravel: number
+}
+
+export function createJourneyGeometry(start: Vec3, config: Pick<Scene01Config, 'departure' | 'journey' | 'parking'>): JourneyGeometry {
+  const departure = createDeparturePath(start, config.departure)
+  const parking = createParkingPath(config.parking)
+  const cityEnd = departure.at(departure.totalLength + config.journey.travel, { x: 0, z: 0, yaw: 0 })
+  const stop = parking.at(parking.totalLength, { x: 0, z: 0, yaw: 0 })
+  return { departure, parking, cityEnd, stop, industrialTravel: stop.x - cityEnd.x }
+}
+
+/**
  * Writes the vehicles' world transforms for the rig's current state into
  * `pose`. Before the departure (distance ≤ 0) the rig positions pass through
- * unchanged, so the approach choreography is untouched. The city journey's
- * travel is added to the departure distance: the final straight continues.
+ * unchanged, so the approach choreography is untouched. The city journey's and
+ * the industrial area's travel are added to the departure distance: the final
+ * straight continues along the highway. Once the reverse into the factory has
+ * begun (`parking.reverse` > 0) the combination is placed on the parking path
+ * instead; at the switch both paths put it at the same stop on the same
+ * straight, so nothing jumps.
  */
-export function resolveCouplingPose(rig: CouplingRig, path: DeparturePath, tracking: TrailerTracking, pose: CouplingPose): void {
-  // The city journey simply drives on along the path's final straight (it continues beyond its nominal end).
-  const s = rig.departure.distance + rig.city.travel
+export function resolveCouplingPose(rig: CouplingRig, path: DeparturePath, tracking: TrailerTracking, pose: CouplingPose, parking?: DeparturePath): void {
+  if (parking && rig.parking.reverse > 0) {
+    resolveOnPath(rig, parking, parking.totalLength - rig.parking.reverse, tracking, pose)
+    return
+  }
+  // The city journey and the industrial travel drive on along the path's final straight (it continues beyond its nominal end).
+  const s = rig.departure.distance + rig.city.travel + rig.industrial.travel
   const { puller, trailer } = pose
   if (!(s > 0)) {
     puller.x = rig.puller.x
@@ -106,10 +189,24 @@ export function resolveCouplingPose(rig: CouplingRig, path: DeparturePath, track
     trailer.yaw = 0
     return
   }
+  resolveOnPath(rig, path, s, tracking, pose)
+}
 
+function resolveOnPath(rig: CouplingRig, path: DeparturePath, s: number, tracking: TrailerTracking, pose: CouplingPose): void {
+  pose.puller.y = rig.puller.y
+  pose.trailer.y = rig.trailer.y
+  placeOnPath(path, s, tracking, pose)
+}
+
+/**
+ * Puller at arc length `s` of `path`; the trailer tracks it (kingpin on the
+ * fifth wheel, rear reference on the path). Writes X, Z and yaw only — the
+ * heights are left as they are.
+ */
+export function placeOnPath(path: DeparturePath, s: number, tracking: TrailerTracking, pose: CouplingPose): void {
+  const { puller, trailer } = pose
   path.at(s, _p)
   puller.x = _p.x
-  puller.y = rig.puller.y
   puller.z = _p.z
   puller.yaw = _p.yaw
 
@@ -128,7 +225,6 @@ export function resolveCouplingPose(rig: CouplingRig, path: DeparturePath, track
   const psi = Math.atan2(dz, -dx)
 
   trailer.x = hx + tracking.kingpinOffset * Math.cos(psi)
-  trailer.y = rig.trailer.y
   trailer.z = hz - tracking.kingpinOffset * Math.sin(psi)
   trailer.yaw = psi
 }

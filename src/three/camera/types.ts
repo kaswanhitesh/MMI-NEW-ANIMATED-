@@ -18,6 +18,16 @@ export interface CameraFraming {
   /** Overrides the spec-wide `maxDistance` for this framing (e.g. a wide shot that may pull back further). */
   maxDistance?: number
   /**
+   * Fixed camera distance (m) for this framing, ignoring the fit and the distance clamps — for a camera that must
+   * pass a precise point on every aspect ratio (e.g. through a doorway). Omit to derive the distance from the fit.
+   */
+  distance?: number
+  /**
+   * Vertical field of view (degrees) for this framing; the spec's `fov` when omitted. Blends between neighbouring
+   * framings with the stage, like position and target (a slow zoom, never a cut).
+   */
+  fov?: number
+  /**
    * 0–1: how much this framing tracks a moving subject. The camera and its target are translated by
    * `follow × (subject − subjectAtRest)` in the ground plane, so at rest the framing is exactly as configured
    * and a moving subject stays in frame. Weights blend between neighbouring framings like everything else.
@@ -33,7 +43,7 @@ export interface CameraFraming {
    * Overrides applied on portrait viewports (aspect < 1). Use it to centre a composition that is right-aligned
    * on landscape screens, or to tighten / loosen the fit where the narrow width would otherwise dominate.
    */
-  portrait?: Partial<Pick<CameraFraming, 'targetOffset' | 'fitWidth' | 'fitHeight' | 'maxDistance' | 'follow' | 'screenOffset'>>
+  portrait?: Partial<Pick<CameraFraming, 'direction' | 'targetOffset' | 'fitWidth' | 'fitHeight' | 'maxDistance' | 'distance' | 'fov' | 'follow' | 'screenOffset'>>
 }
 
 export interface FramedCameraSpec<N extends string = string> {

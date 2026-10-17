@@ -12,16 +12,18 @@
  *
  * Timeline time == scroll progress: the total duration is pinned to exactly 1,
  * phase windows from the config are placed at absolute positions and exposed as
- * labels (`initial`, `approach`, `couplingHold`, `establish`, `departure`,
- * `highwayHold`, `city`, `cityHold`, `end`). Both vehicles travel during `approach` on the same
+ * labels (one per phase in SCENE_01_PHASE_ORDER, then `end`). Both vehicles travel during `approach` on the same
  * window with the same ease while the garage fades in; after the coupling hold
  * and the establishing pull-out, ONE scalar (`rig.departure.distance`) drives
  * the U-turn off the apron onto the highway while the daylight replaces the
  * enclosed-yard atmosphere; in the city phase `rig.city.travel` continues the
- * drive while the camera travels with it. The garage, road, highway and city
- * are fixed in the world and never fade during the journey: the camera
- * following the vehicle is what moves them past. All tuning numbers come from
- * the scene config.
+ * drive while the camera travels with it; `rig.industrial.travel` carries it on
+ * through the industrial area to the Gemini Engi Fab gate, `rig.parking.reverse`
+ * reverses it into the factory, and the `rig.loading` stages run the heavy lift
+ * that puts the vessel on its trailer. The garage, road, highway, city,
+ * industrial area and factory are fixed in the world and never fade during the
+ * journey: the camera following the vehicle is what moves them past. All
+ * tuning numbers come from the scene config.
  */
 import { invalidate } from '@react-three/fiber'
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
@@ -30,8 +32,8 @@ import { createPinnedScrubTimeline, getPhaseAtProgress } from '../../animation/s
 import { FULL_MOTION_QUERY, REDUCED_MOTION_QUERY } from '../../animation/useReducedMotion'
 import { SCENE_01_CONFIG, SCENE_01_PHASE_ORDER, type PhaseWindow, type Scene01CameraFraming, type Scene01Config, type Scene01PhaseName } from './config'
 import type { AssemblyLayout } from './layout'
-import { createDeparturePath } from './departurePath'
-import { assignRig, createFinalRig, createInitialRig, type CouplingPose, type CouplingRig } from './rig'
+import { createDeparturePath, createJourneyGeometry } from './departurePath'
+import { assignRig, createFinalRig, createInitialRig, type CouplingPose, type CouplingRig, type FinalRigState } from './rig'
 
 export interface CouplingTimelineRefs {
   /** The pinned `<section>`: the ScrollTrigger's trigger and pin target. */
@@ -85,6 +87,22 @@ declare global {
     /** Set by `useCouplingTimeline` in development builds only; removed on cleanup. */
     __MMIPL_SCENE01__?: Scene01DebugHandle
   }
+}
+
+/** The hold phase each reduced-motion frame shows. */
+const STATIC_FRAME_PHASE: Readonly<Record<Scene01Config['reducedMotion']['frame'], Scene01PhaseName>> = {
+  coupled: 'couplingHold',
+  highway: 'highwayHold',
+  city: 'cityHold',
+  loaded: 'loadedHold',
+}
+
+/** The camera framing of each reduced-motion frame. */
+const STATIC_FRAME_FRAMING: Readonly<Record<Scene01Config['reducedMotion']['frame'], Scene01CameraFraming>> = {
+  coupled: 'heroHold',
+  highway: 'highway',
+  city: 'city',
+  loaded: 'loading',
 }
 
 /** Fraction of the coupling-hold phase the camera push-in occupies (it settles before the phase ends). */
@@ -196,6 +214,53 @@ function populateTimeline(tl: gsap.core.Timeline, rig: CouplingRig, layout: Asse
   tl.to(rig.camera, { stage: stageOf('city'), duration: Math.max(1e-4, len(CI) * journey.cameraPortion), ease: easing.cityCamera }, CI.start)
 
   // City hold: nothing moves.
+
+  // Industrial area: the combination drives on along the same highway, past the industrial compounds, to a stop just
+  // beyond the Gemini Engi Fab gate (the far end of the parking path). The world stays fixed; the camera keeps
+  // travelling with it, then from `entryCameraStart` settles on the static entry shot of the factory front (stage
+  // city → entry), so the factory is revealed by the drive itself, not by a fade.
+  const IN = phases.industrial
+  const journeyGeometry = createJourneyGeometry(layout.pullerFinal, config)
+  tl.to(rig.industrial, { travel: journeyGeometry.industrialTravel, duration: len(IN), ease: easing.industrialTravel }, IN.start)
+  const entryStart = IN.start + len(IN) * journey.entryCameraStart
+  tl.to(rig.camera, { stage: stageOf('entry'), duration: Math.max(1e-4, IN.end - entryStart), ease: easing.entryCamera }, entryStart)
+
+  // Factory entry and parking: ONE reverse along the parking path, rest to rest, across both phases — through the
+  // gate, through bay A's door (trailer leading) and on to the parking position beside the vessel. The camera holds
+  // the entry shot, then follows the combination in: to the doorway framing, then through the door onto the loading
+  // composition, arriving as the combination stops.
+  const FE = phases.factoryEntry
+  const PK = phases.parking
+  const { parking } = config
+  const reverseSpan = PK.end - FE.start
+  tl.to(rig.parking, { reverse: journeyGeometry.parking.totalLength, duration: reverseSpan, ease: easing.reverse }, FE.start)
+  const doorwayStart = FE.start + reverseSpan * parking.doorwayCameraStart
+  const interiorStart = FE.start + reverseSpan * parking.interiorCameraStart
+  tl.to(rig.camera, { stage: stageOf('doorway'), duration: Math.max(1e-4, interiorStart - doorwayStart), ease: easing.interiorCamera }, doorwayStart)
+  tl.to(rig.camera, { stage: stageOf('loading'), duration: Math.max(1e-4, PK.end - interiorStart), ease: easing.interiorCamera }, interiorStart)
+  // Interior light: the sun leaves the key light while the camera passes through the door.
+  const { interiorLight } = parking
+  const lightFrom = FE.start + reverseSpan * interiorLight.from
+  tl.to(rig.atmosphere, { interior: 1, duration: Math.max(1e-4, reverseSpan * (interiorLight.to - interiorLight.from)), ease: 'sine.inOut' }, lightFrom)
+
+  // Heavy lift (see loading.ts for what each stage moves): one scalar per stage, each in its own phase, slow and
+  // deliberate. As the crane approaches the camera pulls back to the `lift` framing (the crane and rigging in the top
+  // of the frame above the combination); as the rigging is released it returns to the loading composition.
+  const { loading } = rig
+  const crane = easing.crane
+  const RG = phases.rigging
+  const attachSpan = len(RG) * config.loading.timing.riggingAttachPortion
+  tl.to(rig.camera, { stage: stageOf('lift'), duration: len(phases.craneApproach), ease: easing.interiorCamera }, phases.craneApproach.start)
+  tl.to(rig.camera, { stage: stageOf('loading'), duration: len(phases.release), ease: easing.interiorCamera }, phases.release.start)
+  tl.to(loading, { approach: 1, duration: len(phases.craneApproach), ease: crane }, phases.craneApproach.start)
+  tl.to(loading, { attach: 1, duration: attachSpan, ease: crane }, RG.start)
+  tl.to(loading, { tension: 1, duration: Math.max(1e-4, len(RG) - attachSpan), ease: crane }, RG.start + attachSpan)
+  tl.to(loading, { lift: 1, duration: len(phases.lift), ease: crane }, phases.lift.start)
+  tl.to(loading, { transfer: 1, duration: len(phases.transfer), ease: crane }, phases.transfer.start)
+  tl.to(loading, { lower: 1, duration: len(phases.lowering), ease: crane }, phases.lowering.start)
+  tl.to(loading, { release: 1, duration: len(phases.release), ease: crane }, phases.release.start)
+
+  // Loaded hold: nothing moves.
 }
 
 /**
@@ -234,13 +299,21 @@ export function useCouplingTimeline(options: UseCouplingTimelineOptions): Coupli
     const mountStatic = (): (() => void) => {
       setMode('static')
       const showFinal = config.reducedMotion.showFinalState
-      // The static frame is the highway hold or the city hold (config.reducedMotion.frame).
-      const cityFrame = config.reducedMotion.frame === 'city'
-      const finalState = {
-        cameraStage: config.camera.sequence.indexOf(cityFrame ? 'city' : 'highway'),
-        departureDistance: createDeparturePath(layout.pullerFinal, config.departure).totalLength,
-        daylight: 1,
-        cityTravel: cityFrame ? config.journey.travel : 0,
+      // The static frame is the coupling hold, the highway hold, the city hold or the loaded vessel
+      // (config.reducedMotion.frame).
+      const frame = config.reducedMotion.frame
+      const journeyGeometry = createJourneyGeometry(layout.pullerFinal, config)
+      const loaded = frame === 'loaded'
+      const coupled = frame === 'coupled'
+      const finalState: FinalRigState = {
+        cameraStage: config.camera.sequence.indexOf(STATIC_FRAME_FRAMING[frame]),
+        departureDistance: coupled ? 0 : journeyGeometry.departure.totalLength,
+        daylight: coupled ? 0 : 1,
+        cityTravel: frame === 'city' || loaded ? config.journey.travel : 0,
+        industrialTravel: loaded ? journeyGeometry.industrialTravel : 0,
+        parkingReverse: loaded ? journeyGeometry.parking.totalLength : 0,
+        interior: loaded ? 1 : 0,
+        loadingDone: loaded ? 1 : 0,
       }
       const state = showFinal ? createFinalRig(layout, finalState) : createInitialRig(layout)
       // Reduced motion must never hide copy: both overlays are fully visible, and the rig mirrors that so diagnostics agree with the DOM.
@@ -250,7 +323,7 @@ export function useCouplingTimeline(options: UseCouplingTimelineOptions): Coupli
       applyOverlayOpacity(hero.current, rig.overlay.heroOpacity)
       applyOverlayOpacity(caption.current, rig.overlay.captionOpacity)
       invalidate()
-      notifyPhase(showFinal ? (config.reducedMotion.frame === 'city' ? 'cityHold' : 'highwayHold') : 'initial')
+      notifyPhase(showFinal ? STATIC_FRAME_PHASE[frame] : 'initial')
       publishDebugHandle({ rig, layout, pose, timeline: null, scrollTrigger: undefined, mode: 'static' })
       return cleanupPresentation
     }

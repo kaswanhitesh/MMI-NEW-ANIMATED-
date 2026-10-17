@@ -9,7 +9,10 @@ import { MODEL_MANIFEST } from '../../three/assets/modelManifest'
 import type { ModelManifestEntry, Vec3 } from '../../three/assets/types'
 import { worldToSlot } from '../../three/environment/slotSpace'
 import { SCENE_01_CONFIG, SCENE_01_PHASE_ORDER, type Scene01Config } from './config'
-import { createDeparturePath, describeExitRoad } from './departurePath'
+import { createDeparturePath, createJourneyGeometry, describeExitRoad, placeOnPath, type JourneyGeometry, type TrailerTracking } from './departurePath'
+import { SPREADER_PADEYE_HOLE_OFFSET } from '../../three/industrial/LiftingRig'
+import { resolveLoadingGeometry, saddleHornHeight, type LoadingGeometry } from './loading'
+import { createPose, type CouplingPose } from './rig'
 
 export interface AssemblyLayout {
   couplingPoint: Vec3
@@ -63,6 +66,49 @@ export function resolveAssemblyLayout(config: Scene01Config = SCENE_01_CONFIG, m
     trailerFinal,
   }
 }
+
+/** Trailer tracking distances for the path resolver (see departurePath.ts), measured from the resolved rest layout. */
+export function resolveTrailerTracking(layout: AssemblyLayout, config: Scene01Config = SCENE_01_CONFIG, manifest: Manifest = MODEL_MANIFEST): TrailerTracking {
+  const hitchOffset = manifest[config.models.puller].anchors.coupling[0] * config.models.scale
+  return {
+    hitchOffset,
+    // From the rest layout rather than the anchors alone, so the first frame of the departure reproduces the coupled
+    // rest pose exactly, whatever `assembly.connectedGap` or a final-position override says.
+    kingpinOffset: layout.trailerFinal[0] - layout.pullerFinal[0] - hitchOffset,
+    trackingLength: config.departure.trailerTrackingLength,
+  }
+}
+
+/** Everything the factory sequence derives from the config: both paths, the parked combination and the loading geometry. */
+export interface FactoryLayout {
+  journey: JourneyGeometry
+  tracking: TrailerTracking
+  /** The combination at the end of the reverse (heights at ground level). */
+  parked: CouplingPose
+  loading: LoadingGeometry
+}
+
+export function resolveFactoryLayout(layout: AssemblyLayout, config: Scene01Config = SCENE_01_CONFIG, manifest: Manifest = MODEL_MANIFEST): FactoryLayout {
+  const journey = createJourneyGeometry(layout.pullerFinal, config)
+  const tracking = resolveTrailerTracking(layout, config, manifest)
+  const parked = createPose(layout)
+  parked.puller.y = config.world.groundY
+  parked.trailer.y = config.world.groundY
+  placeOnPath(journey.parking, 0, tracking, parked)
+  const groundY = config.world.groundY
+  const loading = resolveLoadingGeometry({
+    loading: config.loading,
+    vessel: config.industry.cargo.vessel,
+    supports: config.industry.supports,
+    trailer: parked.trailer,
+    deckTop: groundY + config.loading.cargo.trailerDeckTop * config.models.scale,
+    groundY,
+  })
+  return { journey, tracking, parked, loading }
+}
+
+/** Framings that are level SIDE views (the camera looks straight across the travel axis). */
+const SIDE_VIEW_FRAMINGS = ['base', 'heroHold', 'wide', 'highway', 'city', 'entry'] as const
 
 /**
  * Returns human-readable warnings about inconsistent configuration. Empty array = consistent.
@@ -119,12 +165,16 @@ export function validateScene01Config(config: Scene01Config = SCENE_01_CONFIG, m
   if (!(j.travel >= 0)) warnings.push('journey.travel must be ≥ 0.')
   if (!(j.cameraPortion > 0 && j.cameraPortion <= 1)) warnings.push('journey.cameraPortion must be in (0, 1].')
   // The timeline walks the stage through these framings in this order (it looks each one up by name).
-  const order = ['base', 'heroHold', 'wide', 'highway', 'city'] as const
+  const order = ['base', 'heroHold', 'wide', 'highway', 'city', 'entry', 'doorway', 'loading', 'lift'] as const
   const indices = order.map((name) => config.camera.sequence.indexOf(name))
   if (indices.some((i, k) => i < 0 || (k > 0 && i !== indices[k - 1] + 1))) warnings.push(`camera.sequence must list ${order.join(', ')} consecutively in that order.`)
-  // Level side views: a framing with a sideways direction component tilts every line along the travel axis.
-  for (const name of config.camera.sequence) {
-    if (Math.abs(config.camera.framings[name].direction[0]) > 1e-9) warnings.push(`camera.framings.${name}.direction[0] should be 0 for a level side view (lines along X would slant).`)
+  // Level side views: a framing with a sideways direction component tilts every line along the travel axis. (The
+  // doorway and loading framings are deliberate three-quarter views inside the factory; the camera still has no roll.)
+  for (const name of SIDE_VIEW_FRAMINGS) {
+    const framing = config.camera.framings[name]
+    if (Math.abs(framing.direction[0]) > 1e-9 || Math.abs(framing.portrait?.direction?.[0] ?? 0) > 1e-9) {
+      warnings.push(`camera.framings.${name}.direction[0] should be 0 for a level side view (lines along X would slant).`)
+    }
   }
   const skyRadius = config.environment.atmosphere.sky.radius
   if (config.camera.far <= skyRadius) warnings.push(`camera.far (${config.camera.far}) must exceed the sky radius (${skyRadius}).`)
@@ -174,9 +224,85 @@ export function validateScene01Config(config: Scene01Config = SCENE_01_CONFIG, m
     if (exit.outline.length < 3 || !exit.kerbGap || !exit.junction) warnings.push('environment.road: the exit road does not connect the apron kerb to the highway — check the slots and departure geometry.')
   }
 
+  // 5c. The factory sequence: the reverse must start where the industrial travel ends, on the highway's far lane, with
+  // the trailer straight behind the puller; the parked combination must stand inside bay A; the loading geometry
+  // must fit the vessel, the saddles and the rigging.
+  warnings.push(...validateFactorySequence(layout, config, manifest))
+
   // 6. Entrances must actually travel in the documented directions.
   if (layout.pullerStart[0] >= layout.pullerFinal[0]) warnings.push('pullerStart must be at −X of the puller final position (it enters from the left).')
   if (layout.trailerStart[0] <= layout.trailerFinal[0]) warnings.push('trailerStart must be at +X of the trailer final position (it enters from the right).')
 
+  return warnings
+}
+
+function validateFactorySequence(layout: AssemblyLayout, config: Scene01Config, manifest: Manifest): string[] {
+  const warnings: string[] = []
+  const f = resolveFactoryLayout(layout, config, manifest)
+  const { journey, tracking, parked, loading } = f
+  const pk = config.parking
+  if (!(pk.bayStraight > 0 && pk.turnRadius > 0)) warnings.push('parking.bayStraight and parking.turnRadius must be > 0.')
+  if (pk.roadStraight < tracking.hitchOffset + tracking.trackingLength) {
+    warnings.push(`parking.roadStraight (${pk.roadStraight} m) must be ≥ the fifth-wheel offset + trailer tracking length (${(tracking.hitchOffset + tracking.trackingLength).toFixed(2)} m) so the trailer is straight when the reverse begins.`)
+  }
+  if (Math.abs(journey.stop.z - journey.cityEnd.z) > 1e-6 || Math.abs(Math.cos(journey.stop.yaw - journey.cityEnd.yaw) - 1) > 1e-9) {
+    warnings.push(`The parking path's far end (z ${journey.stop.z.toFixed(2)}) must lie on the highway lane the journey drives along (z ${journey.cityEnd.z.toFixed(2)}), heading the same way — adjust parking.pullerPosition or turnRadius.`)
+  }
+  if (!(journey.industrialTravel > 0)) warnings.push(`The factory stop lies behind the end of the city journey (industrial travel ${journey.industrialTravel.toFixed(1)} m) — move the factory further along the highway or shorten journey.travel.`)
+  const { doorwayCameraStart: d, interiorCameraStart: i } = pk
+  if (!(d >= 0 && d < i && i < 1)) warnings.push('parking camera fractions must satisfy 0 ≤ doorwayCameraStart < interiorCameraStart < 1.')
+  const il = pk.interiorLight
+  if (!(il.from >= 0 && il.from < il.to && il.to <= 1 && il.keyScale >= 0 && il.keyScale <= 1)) warnings.push('parking.interiorLight must satisfy 0 ≤ from < to ≤ 1 and keyScale in [0, 1].')
+  if (!(config.journey.entryCameraStart >= 0 && config.journey.entryCameraStart < 1)) warnings.push('journey.entryCameraStart must be in [0, 1).')
+
+  // The parked puller and trailer stand inside the factory's vehicle bay, clear of its walls.
+  const fac = config.industry.factory
+  if (fac.enabled) {
+    const bay = fac.building.bays.find((b) => b.door.x1 - b.door.x0 > 0 && b.hasCrane && worldToSlot(fac.slot, [parked.puller.x, parked.puller.z])[0] > b.x0 && worldToSlot(fac.slot, [parked.puller.x, parked.puller.z])[0] < b.x1)
+    if (!bay) warnings.push('The parked puller does not stand inside a crane bay of the factory.')
+    for (const [label, v] of [['puller', parked.puller], ['trailer', parked.trailer]] as const) {
+      const [lx, lz] = worldToSlot(fac.slot, [v.x, v.z])
+      if (lz > -2 || lz < -fac.building.length + 2) warnings.push(`The parked ${label} is not inside the factory (factory-local z ${lz.toFixed(1)}).`)
+      if (bay && (lx < bay.x0 + 3 || lx > bay.x1 - 3)) warnings.push(`The parked ${label} stands within 3 m of bay ${bay.name}'s column line (factory-local x ${lx.toFixed(1)}).`)
+    }
+    // The vessel's resting place too.
+    const [rx] = worldToSlot(fac.slot, [loading.rest[0], loading.rest[2]])
+    if (bay && (rx < bay.x0 + 3 || rx > bay.x1 - 3)) warnings.push(`The vessel's resting place is within 3 m of bay ${bay.name}'s column line (factory-local x ${rx.toFixed(1)}).`)
+  }
+
+  // Loading geometry.
+  const vessel = config.industry.cargo.vessel
+  const sup = config.industry.supports
+  const ld = config.loading
+  if (vessel.stage !== 'complete' || vessel.lugs.x.length !== 2) warnings.push('industry.cargo.vessel must be complete with exactly two lifting lugs (the rig has two lower slings).')
+  const lugSpan = vessel.lugs.x.length === 2 ? Math.abs(vessel.lugs.x[1] - vessel.lugs.x[0]) : 0
+  const spreader = config.industry.crane.rig.spreader.length
+  if (Math.abs(spreader - lugSpan) > 0.05) warnings.push(`The spreader beam (${spreader} m) should match the lug spacing (${lugSpan} m) so the lower slings hang vertically.`)
+  for (const cfg of [sup.ground, sup.trailer]) {
+    if (Math.abs(cfg.vesselDiameter - vessel.diameter) > 1e-6) warnings.push('industry.supports: saddle vesselDiameter must equal the cargo vessel diameter.')
+  }
+  const deckStart = -manifest[config.models.trailer].footprint.length / 2
+  const deckEnd = manifest[config.models.trailer].footprint.length / 2
+  for (const t of loading.trailerSaddles) {
+    if (t[0] - sup.trailer.thickness / 2 < deckStart || t[0] + sup.trailer.thickness / 2 > deckEnd) warnings.push(`A trailer saddle (trailer-local x ${t[0].toFixed(2)}) is off the trailer.`)
+  }
+  for (const o of sup.offsets) {
+    if (!vessel.wearPads.some((w) => Math.abs(w - o) < 1e-6)) warnings.push(`Saddle offset ${o} has no matching wear pad on the vessel.`)
+  }
+  if (!(loading.liftBottom > Math.max(saddleHornHeight(sup.ground) + config.world.groundY, loading.hornHeight.trailer))) warnings.push('The lift height does not clear the saddle horns.')
+  const t = ld.timing
+  if (!(t.riggingAttachPortion > 0 && t.riggingAttachPortion < 1)) warnings.push('loading.timing.riggingAttachPortion must be in (0, 1).')
+  if (!(t.approachLowerStart >= 0 && t.approachLowerStart < 1 && t.approachTravelEnd > 0 && t.approachTravelEnd <= 1)) warnings.push('loading.timing approach fractions must be in [0, 1].')
+  if (!(t.attachContact > 0 && t.attachContact < 1)) warnings.push('loading.timing.attachContact must be in (0, 1).')
+  if (!(t.releaseDetach > 0 && t.releaseDetach < t.releaseRiseStart && t.releaseRiseStart < t.releaseTravelStart && t.releaseTravelStart < 1)) {
+    warnings.push('loading.timing must satisfy 0 < releaseDetach < releaseRiseStart < releaseTravelStart < 1.')
+  }
+  if (!(ld.rigging.slingLength > 0 && ld.rigging.topSlingRise > 0 && ld.rigging.slack >= 0)) warnings.push('loading.rigging lengths must be positive.')
+  // The hook never has to rise above what the crane allows: parked, carrying the vessel, or clearing it after release.
+  const pinY = loading.pins[0]?.[1] ?? 0
+  const holeDrop = config.industry.crane.rig.spreader.depth / 2 + SPREADER_PADEYE_HOLE_OFFSET
+  const hookOver = (bottom: number, extra: number) => bottom + pinY + ld.rigging.slingLength + holeDrop + extra + ld.rigging.topSlingRise
+  const highest = Math.max(ld.crane.parkHookY, hookOver(loading.liftBottom, 0), hookOver(loading.rest[1], ld.crane.approachClearance), hookOver(loading.deck[1], ld.crane.approachClearance))
+  if (highest > ld.crane.maxHookY + 1e-9) warnings.push(`The loading needs the hook at ${highest.toFixed(2)} m but loading.crane.maxHookY is ${ld.crane.maxHookY} m — shorten the slings or lower the lift.`)
   return warnings
 }

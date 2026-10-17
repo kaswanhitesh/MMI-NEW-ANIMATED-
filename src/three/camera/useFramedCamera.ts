@@ -19,6 +19,8 @@ import type { CameraFraming, FramedCameraSpec } from './types'
 export interface FramedCameraPose {
   position: Vec3
   target: Vec3
+  /** Vertical field of view (degrees). */
+  fov: number
 }
 
 const DEG2RAD = Math.PI / 180
@@ -33,16 +35,22 @@ export function resolveFraming(framing: CameraFraming, aspect: number): CameraFr
   return { ...framing, ...framing.portrait }
 }
 
+/** Vertical field of view (degrees) a framing uses at `aspect`. Pure. */
+export function resolveFramingFov(spec: FramedCameraSpec, framing: CameraFraming, aspect: number): number {
+  return resolveFraming(framing, aspect).fov ?? spec.fov
+}
+
 /**
  * Camera distance (m) from the framing target at which both `fitWidth` and
- * `fitHeight` fit the viewport for the spec's vertical fov at `aspect`,
+ * `fitHeight` fit the viewport for the framing's vertical fov at `aspect`,
  * clamped to `[minDistance, maxDistance]` (the framing's own `maxDistance`
- * wins over the spec's). Portrait overrides apply. A non-finite or zero
- * aspect is treated as 1.
+ * wins over the spec's), unless the framing fixes its `distance`. Portrait
+ * overrides apply. A non-finite or zero aspect is treated as 1.
  */
 export function computeFramedCameraDistance(spec: FramedCameraSpec, framing: CameraFraming, aspect: number): number {
   const f = resolveFraming(framing, aspect)
-  const halfTan = Math.tan((spec.fov * DEG2RAD) / 2)
+  if (f.distance !== undefined) return f.distance
+  const halfTan = Math.tan(((f.fov ?? spec.fov) * DEG2RAD) / 2)
   const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1
   const byWidth = f.fitWidth / 2 / (halfTan * safeAspect)
   const byHeight = f.fitHeight / 2 / halfTan
@@ -57,6 +65,7 @@ export function computeFramedCameraDistance(spec: FramedCameraSpec, framing: Cam
 export function computeFramedCameraPose(spec: FramedCameraSpec, framing: CameraFraming, aspect: number): FramedCameraPose {
   const f = resolveFraming(framing, aspect)
   const distance = computeFramedCameraDistance(spec, framing, aspect)
+  const fov = f.fov ?? spec.fov
   const [dx, dy, dz] = f.direction
   const length = Math.hypot(dx, dy, dz) || 1
   const offset = f.targetOffset
@@ -64,7 +73,7 @@ export function computeFramedCameraPose(spec: FramedCameraSpec, framing: CameraF
   const position: Vec3 = [target[0] + (dx / length) * distance, target[1] + (dy / length) * distance, target[2] + (dz / length) * distance]
   if (f.screenOffset && (f.screenOffset[0] !== 0 || f.screenOffset[1] !== 0)) {
     const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1
-    const halfTan = Math.tan((spec.fov * DEG2RAD) / 2)
+    const halfTan = Math.tan((fov * DEG2RAD) / 2)
     // View basis: forward points from the camera to the target; right = forward × worldUp; up = right × forward.
     const fx = -dx / length
     const fy = -dy / length
@@ -86,9 +95,10 @@ export function computeFramedCameraPose(spec: FramedCameraSpec, framing: CameraF
     return {
       position: [position[0] + shiftX, position[1] + shiftY, position[2] + shiftZ],
       target: [target[0] + shiftX, target[1] + shiftY, target[2] + shiftZ],
+      fov,
     }
   }
-  return { position, target }
+  return { position, target, fov }
 }
 
 function lerp3(a: Vec3, b: Vec3, t: number): Vec3 {
@@ -118,13 +128,14 @@ function blendPoses(poses: readonly FramedCameraPose[], weights: readonly number
   const a = poses[i]
   const b = poses[Math.min(i + 1, last)]
   const w = (weights[i] ?? 0) + ((weights[Math.min(i + 1, last)] ?? 0) - (weights[i] ?? 0)) * t
-  const base = t <= 0 || a === b ? a : { position: lerp3(a.position, b.position, t), target: lerp3(a.target, b.target, t) }
+  const base = t <= 0 || a === b ? a : { position: lerp3(a.position, b.position, t), target: lerp3(a.target, b.target, t), fov: a.fov + (b.fov - a.fov) * t }
   if (w === 0 || (follow[0] === 0 && follow[1] === 0)) return base
   const dx = w * follow[0]
   const dz = w * follow[1]
   return {
     position: [base.position[0] + dx, base.position[1], base.position[2] + dz],
     target: [base.target[0] + dx, base.target[1], base.target[2] + dz],
+    fov: base.fov,
   }
 }
 
@@ -151,8 +162,9 @@ const _lookAt = new Vector3()
  * and `getFollow` are read every frame, so they may close over a mutable
  * animation rig. `getFollow` returns the followed subject's ground-plane
  * displacement from rest; framings with a `follow` weight track it.
- * Projection parameters (fov / near / far) are written only when they differ
- * from the spec.
+ * Projection parameters are written only when they change: near / far from
+ * the spec, the vertical fov from the blended framings (`framing.fov`, else
+ * the spec's).
  */
 export function useFramedCamera(spec: FramedCameraSpec, getStage: () => number, getFollow?: () => FollowDelta): void {
   const cache = useRef<FramedCameraCache>({ camera: null, spec: null, aspect: NaN, stage: NaN, followX: NaN, followZ: NaN, poses: null, weights: null })
@@ -165,8 +177,7 @@ export function useFramedCamera(spec: FramedCameraSpec, getStage: () => number, 
     const follow = getFollow ? getFollow() : NO_FOLLOW
     const c = cache.current
 
-    if (isPerspective(camera) && (camera.fov !== spec.fov || camera.near !== spec.near || camera.far !== spec.far)) {
-      camera.fov = spec.fov
+    if (isPerspective(camera) && (camera.near !== spec.near || camera.far !== spec.far)) {
       camera.near = spec.near
       camera.far = spec.far
       camera.updateProjectionMatrix()
@@ -186,6 +197,10 @@ export function useFramedCamera(spec: FramedCameraSpec, getStage: () => number, 
     c.followZ = follow[1]
 
     const pose = blendPoses(c.poses, c.weights, stage, follow)
+    if (isPerspective(camera) && camera.fov !== pose.fov) {
+      camera.fov = pose.fov
+      camera.updateProjectionMatrix()
+    }
     camera.position.set(pose.position[0], pose.position[1], pose.position[2])
     _lookAt.set(pose.target[0], pose.target[1], pose.target[2])
     camera.lookAt(_lookAt)

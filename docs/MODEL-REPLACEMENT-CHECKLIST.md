@@ -79,10 +79,11 @@ In `src/scenes/scene-01-coupling/config.ts`:
       viewport: both vehicles travel together from left and right, couple, the camera pulls out, the
       combination U-turns off the garage apron onto the highway and holds on the right with the garage
       (and its sign) behind it, then drives on as the garage slides away and the city opens up, and
-      holds low on the left; scrolling up reverses all of it.
-- [ ] Enable "reduce motion" in the OS and reload: the finished combination is shown statically
-      on the highway with the garage behind it (or in the city, with `reducedMotion.frame: 'city'`)
-      with the copy visible.
+      holds low on the left; it drives on to the Gemini Engi Fab factory, reverses into bay A and
+      parks beside the vessel, which the crane lifts onto the trailer; scrolling up reverses all of it.
+- [ ] Enable "reduce motion" in the OS and reload: the coupled combination is shown statically in
+      the garage with the copy visible (`reducedMotion.frame` also offers `'highway'`, `'city'` and
+      `'loaded'`).
 - [ ] Temporarily rename one `.glb` to confirm the placeholder fallback still works — the site must
       stay usable without any model.
 - [ ] Remove `placeholders.showBadge` only if you want to hide the badge in production; it never
@@ -98,19 +99,23 @@ stand-ins only establish the spatial relationships; replace them one at a time.
       `docs/COORDINATE-SYSTEM.md`): for the garage the facade's front plane is local z = 0, the hall
       runs to −Z and the forecourt to +Z, and the coupling area (world z ≈ 0, i.e. local z ≈ 26) must
       be clear, level ground. Keep it inside `slot.bounds` (set `environment.showSlotBounds: true`
-      to see the boxes in the dev build).
+      to see the boxes; keep it false in production).
 - [ ] Put the file under `public/models/environment/` and set, for example:
 
       model: { url: `${import.meta.env.BASE_URL}models/environment/garage.glb`, scale: 1,
                position: [0, 0, 0], rotation: [0, 0, 0], castShadow: false, receiveShadow: true }
 
       `scale`, `position` and `rotation` correct the export inside the slot; `slot.position` /
-      `slot.rotationY` move the whole environment (stand-in, model and attachments together).
+      `slot.rotationY` move the whole environment (stand-in, model and attachments together) —
+      except the exit road, whose stand-in follows the vehicle's path in world space and stays put.
 - [ ] While the file loads, or if it is missing or invalid, the stand-in is shown and the dev
       console logs one `[environment] <name>: …` warning — nothing breaks.
-- [ ] Garage: the model fades in with the approach exactly like the stand-in (its materials are
-      cloned and faded). The MEGA MOVE INDIA sign is an attachment of the slot and stays: leave its
-      wall area clean (local x −42.6 … −32.0, y 7.9 … 10.5 on the facade plane), move it with
+- [ ] Garage: the model fades in with the approach like the stand-in (its materials are cloned and
+      faded; once fully visible its own transparency, render order and shadow flags apply again).
+      Unlike the stand-in, its meshes share one render order while part-faded, so inner surfaces can
+      show through during the fade. The MEGA MOVE INDIA sign is an attachment of the slot and stays:
+      leave its wall area clean (local x −42.8 … −31.8, y 7.7 … 11.6 on the facade plane: the board,
+      its frame and the lamp wall plates; the lamp arms reach 1.3 m out from the wall), move it with
       `garage.sign.centre`, or set `garage.sign.enabled: false` if the model carries its own sign.
       The kerb gap and apron belong to the stand-in; the model must provide its own forecourt edge
       with an opening where the exit road leaves (world x ≈ −35 … −24.5 at z 16).
@@ -120,3 +125,34 @@ stand-ins only establish the spatial relationships; replace them one at a time.
       city entirely behind the garage (world z < −70) so nothing stands between the camera and the
       vehicle. The city must cover world x −1200 … 1500 (the widest view over the whole journey).
 - [ ] Re-run the checks in section 6.
+
+## 8. Replacing the factory, the crane and the cargo
+
+The closing sequence's stand-ins live in `config.industry` (`zone`, `factory`, `crane`, `cargo`,
+`supports`, `workpieces`). Same rules as section 7 — author each in its slot's LOCAL frame (stated
+on each type in `src/three/industrial/types.ts`), set `slot.model`, and the stand-in remains the
+fallback while the file loads or if it is missing.
+
+- [ ] Factory (`industry.factory.slot`, frame: floor level on the front wall line, −Z into the hall,
+      +Z to the road): keep bay A's door opening (local x 6 … 36, 18 m high), the gate (local x
+      10 … 48 at z 13.5) and the floor of bay A clear — the combination reverses through them and
+      parks there, and the camera flies through the door. The GEMINI ENGI FAB sign is an attachment
+      of the slot (`industry.factory.sign`); disable it if the model carries its own.
+- [ ] Crane (`industry.crane.slot`, frame: runway along local Z, span along X, floor at y = 0): the
+      model must contain three nodes, `bridge` ⊃ `trolley` ⊃ `hook`, each a child of the previous
+      one. The scene sets `bridge.position.z`, `trolley.position.x` and `hook.position.y` every frame
+      from the crane pose (in the model's units), so author the trolley and hook with their origins
+      at y = 0 on the crane's centre line and the hook's slinging point at the hook node's origin.
+      Hoist ropes must belong to the hook node (long enough to reach into the trolley at the lowest
+      hook position). The spreader, slings and shackles stay procedural.
+- [ ] Cargo (`industry.cargo.slot`, frame: the vessel's — axis along X, y = 0 at its lowest point,
+      x = 0 at the shell middle): the slot frame moves with the vessel, so the model is lifted and
+      carried without further work. Keep the dimensions in `industry.cargo.vessel` true to the model:
+      the lug pins (`lugs.x`, `lugs.height`, `holeDiameter`) place the shackles, `diameter` and the
+      saddles' `height` place it on the supports, and `topY` is used for the crane clearances.
+- [ ] Saddles (`industry.supports.models.ground` / `.trailer`, frame: origin under the saddle centre
+      on its base, X along the vessel axis): the vessel's lowest point rests at the saddle's
+      `height`. The trailer saddles ride with the trailer; `loading.cargo.trailerDeckTop` must equal
+      the final trailer model's deck height.
+- [ ] Re-run the checks in section 6 and scroll through the factory sequence: the vessel must sit on
+      its saddles at rest and after the set-down, the shackles on the lugs while it is lifted.

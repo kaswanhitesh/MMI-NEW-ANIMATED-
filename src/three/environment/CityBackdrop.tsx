@@ -2,7 +2,7 @@
  * Procedural stand-in for the CITY environment of Scene 01: a seeded generator
  * lays out low industrial sheds with stacks, a band of mid-rise commercial
  * blocks and a distant skyline of towers (some taller landmark towers with
- * setback crowns) — boxes only, one InstancedMesh per material (6 draw calls),
+ * setback crowns) — boxes only, one InstancedMesh per material (5 draw calls),
  * no textures. Authored in its slot's local space; it stands entirely behind
  * the garage and the road from the camera's point of view.
  *
@@ -79,7 +79,7 @@ function buildCity(cfg: CityConfig, groundY: number): Record<PartKey, BoxItem[]>
 
   // Distant skyline: towers, some landmark towers with a setback crown and a slim mast.
   const sk = cfg.skyline
-  walkBand(rand, cfg.span, sk, (x, w) => {
+  walkBand(rand, sk.span ?? cfg.span, sk, (x, w) => {
     const d = range(rand, sk.depth)
     const z = range(rand, sk.zRange) - d / 2
     nextTone()
@@ -98,7 +98,7 @@ function buildCity(cfg: CityConfig, groundY: number): Record<PartKey, BoxItem[]>
 
   // Mid-rise commercial blocks.
   const mr = cfg.midrise
-  walkBand(rand, cfg.span, mr, (x, w) => {
+  walkBand(rand, mr.span ?? cfg.span, mr, (x, w) => {
     const d = range(rand, mr.depth)
     const z = range(rand, mr.zRange) - d / 2
     const h = range(rand, mr.height)
@@ -111,7 +111,7 @@ function buildCity(cfg: CityConfig, groundY: number): Record<PartKey, BoxItem[]>
 
   // Industrial sheds with occasional stacks.
   const ind = cfg.industrial
-  walkBand(rand, cfg.span, ind, (x, w) => {
+  walkBand(rand, ind.span ?? cfg.span, ind, (x, w) => {
     const d = range(rand, ind.depth)
     const z = range(rand, ind.zRange) - d / 2
     const h = range(rand, ind.height)

@@ -18,7 +18,7 @@ import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, typ
 import { Box3, Box3Helper, Color, Mesh, Vector3 } from 'three'
 import { ModelErrorBoundary } from '../assets/ModelErrorBoundary'
 import { ModelLoader, configureModelLoader, getModelLoadErrorMessage } from '../assets/ValidatedGLTFLoader'
-import { clamp01, cloneMaterialsForFade, setMaterialsOpacity, type FadeClones } from './fadeMaterials'
+import { clamp01, cloneMaterialsForFade, type FadeClones } from './fadeMaterials'
 import type { EnvironmentModelConfig, EnvironmentSlotConfig } from './types'
 
 export interface EnvironmentSlotProps {
@@ -78,7 +78,7 @@ function EnvironmentModel({
       object.receiveShadow = model.receiveShadow
     })
     if (wantsFade) {
-      fadeRef.current = cloneMaterialsForFade(scene, { renderOrder: fadeRenderOrder })
+      fadeRef.current = cloneMaterialsForFade(scene, { renderOrder: fadeRenderOrder, restoreWhenOpaque: true })
       lastOpacity.current = Number.NaN
     }
     invalidate()
@@ -96,7 +96,7 @@ function EnvironmentModel({
     const opacity = clamp01(getOpacity())
     if (opacity === lastOpacity.current) return
     lastOpacity.current = opacity
-    setMaterialsOpacity(fade.clones, opacity)
+    fade.setOpacity(opacity)
     scene.visible = opacity > 0.001
   })
 

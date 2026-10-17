@@ -22,6 +22,11 @@ export interface StageLightingProps {
    * shadow frustum, so shadows follow moving vehicles. The light's direction is unchanged. Defaults to none.
    */
   getShadowOffset?: () => readonly [number, number]
+  /**
+   * Read every frame: multiplier (0–1) on the key light's intensity, e.g. to take the sun out of an interior whose
+   * roof the compact shadow frustum cannot cover. Defaults to 1.
+   */
+  getKeyScale?: () => number
 }
 
 /** Hemisphere light height; only its orientation (straight down) matters, so the value is not tuned. */
@@ -34,7 +39,7 @@ const HEMISPHERE_HEIGHT = 50
  */
 const SHADOW_DEPTH_FACTOR = 1.5
 
-export function StageLighting({ lighting, shadowCentre, getShadowOffset }: StageLightingProps) {
+export function StageLighting({ lighting, shadowCentre, getShadowOffset, getKeyScale }: StageLightingProps) {
   const { hemisphere, key, fill, rim } = lighting
   const keyRef = useRef<DirectionalLight>(null)
   const target = useMemo(() => new Object3D(), [])
@@ -79,7 +84,12 @@ export function StageLighting({ lighting, shadowCentre, getShadowOffset }: Stage
   const lastOffset = useRef<[number, number]>([Number.NaN, Number.NaN])
   useFrame(() => {
     const light = keyRef.current
-    if (!light || !getShadowOffset) return
+    if (!light) return
+    if (getKeyScale) {
+      const intensity = key.intensity * Math.min(1, Math.max(0, getKeyScale()))
+      if (light.intensity !== intensity) light.intensity = intensity
+    }
+    if (!getShadowOffset) return
     const [ox, oz] = getShadowOffset()
     if (ox === lastOffset.current[0] && oz === lastOffset.current[1]) return
     lastOffset.current = [ox, oz]

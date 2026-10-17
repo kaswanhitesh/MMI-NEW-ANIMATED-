@@ -53,7 +53,7 @@ export interface EnvironmentModelConfig {
  * Where an environment sits and how it can be replaced. `position` /
  * `rotationY` place the slot's local origin in the world; `bounds` is the
  * slot-local box reserved for the environment (a replacement model should fit
- * inside it; development builds can draw it); `model` swaps the procedural
+ * inside it; `showSlotBounds` draws it); `model` swaps the procedural
  * placeholder for a GLB without touching the vehicle rig or the timeline.
  */
 export interface EnvironmentSlotConfig {
@@ -83,7 +83,7 @@ export interface YardEnvironmentConfig {
   /** Subtle painted yard markings on the floor — restrained environmental detail. */
   markings: { color: string; opacity: number; laneHalfWidth: number; length: number; stripeLength: number; stripeGap: number }
   contactShadow: { opacity: number; blur: number; width: number; height: number; far: number; resolution: number }
-  /** Development aid: draw every environment slot's reserved bounds as a wireframe box. */
+  /** Debugging aid (any build, keep false in production): draw every environment slot's reserved bounds as a wireframe box. */
   showSlotBounds: boolean
   /** Open-air daylight (sky, haze, ground tone) the scene blends to as the vehicle leaves the yard. */
   atmosphere: AtmosphereConfig
@@ -116,6 +116,8 @@ export interface CityBuildingBand {
   height: readonly [number, number]
   /** Gap between neighbouring buildings along X (m). */
   gap: readonly [number, number]
+  /** Slot-local X range of this band; the city's `span` when omitted (e.g. near bands that stop where an industrial area begins). */
+  span?: readonly [number, number]
 }
 
 /**
@@ -157,10 +159,11 @@ export interface HighwayConfig {
   /** Strength of the procedural asphalt grain, 0 (flat colour) to 1. */
   grain: number
   /**
-   * Street lights on the far verge, arms reaching over the shoulder. None stand inside `exclude` (local X range):
-   * the stretch in front of the garage, where a pole would stand between the camera and the vehicles.
+   * Street lights on the far verge, arms reaching over the shoulder. None stand inside the `exclude` ranges (local X):
+   * e.g. the stretch in front of the garage, where a pole would stand between the camera and the vehicles, or a
+   * site entrance a vehicle turns through.
    */
-  streetLights: { enabled: boolean; spacing: number; height: number; armLength: number; exclude: readonly [number, number]; color: string }
+  streetLights: { enabled: boolean; spacing: number; height: number; armLength: number; exclude: ReadonlyArray<readonly [number, number]>; color: string }
 }
 
 /** Paved exit road between the garage apron and the highway's far carriageway edge. */
@@ -170,7 +173,7 @@ export interface AccessRoadConfig {
   slot: EnvironmentSlotConfig
   /** Road width (m), centred on the puller's path; covers the trailer's swept path. */
   width: number
-  /** Metres the road tucks under the apron edge and under the carriageway at either end (hides the joints). */
+  /** Metres the road runs on past the apron kerb and into the carriageway at either end; it lies ON them (LIFT.exitRoad), hiding the joints. */
   overlap: number
   color: string
   /** Strength of the procedural asphalt grain, 0 (flat colour) to 1. */
@@ -219,6 +222,11 @@ export interface BrandSignConfig {
   colors: { face: string; text: string; border: string; frame: string; bracket: string; accent: string; lamp: string }
   /** Gooseneck floodlights above the board. */
   lamps: { count: number; intensity: number }
+  /**
+   * How strongly the floodlights light the face (emissive strength of the lettered face, 0 = lit by the scene only).
+   * Keeps the lettering legible in a dim yard or in fog without a real light source.
+   */
+  floodlight: number
 }
 
 /**

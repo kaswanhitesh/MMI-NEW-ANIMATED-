@@ -1,8 +1,9 @@
 /**
  * Scene 01's R3F stage: background, fog, daylight sky, procedural environment
- * lighting, stage lights, yard floor, the four replaceable ENVIRONMENT SLOTS —
- * garage (with its wall sign), exit road, highway, city — the responsive
- * camera rig and the two vehicles. Rendered INSIDE a `SceneCanvas` — it owns
+ * lighting, stage lights, yard floor, the replaceable ENVIRONMENT SLOTS —
+ * garage (with its wall sign), exit road, highway, city, and the closing
+ * sequence's industrial area, factory, crane, cargo and saddles (see
+ * FactorySequence.tsx) — the responsive camera rig and the two vehicles. Rendered INSIDE a `SceneCanvas` — it owns
  * no canvas of its own. Every number comes from `SCENE_01_CONFIG` (or the
  * `config` prop) and the resolved `AssemblyLayout`; the vehicles read the
  * per-frame `CouplingPose`, which `PoseResolver` derives from the mutable
@@ -28,15 +29,16 @@ import { EnvironmentSlot } from '../../../three/environment/EnvironmentSlot'
 import { FleetGarage } from '../../../three/environment/FleetGarage'
 import { Highway } from '../../../three/environment/Highway'
 import { ProceduralEnvironment } from '../../../three/environment/ProceduralEnvironment'
-import { worldToSlot } from '../../../three/environment/slotSpace'
+import { slotToWorld, worldToSlot } from '../../../three/environment/slotSpace'
 import { StageLighting } from '../../../three/environment/StageLighting'
 import { YardFloor } from '../../../three/environment/YardFloor'
 import { SCENE_01_CONFIG, type Scene01Config } from '../config'
-import { combinationCentre, createDeparturePath, describeExitRoad, resolveCouplingPose, type CombinationLengths, type TrailerTracking } from '../departurePath'
-import type { AssemblyLayout } from '../layout'
+import { combinationCentre, describeExitRoad, resolveCouplingPose, type CombinationLengths } from '../departurePath'
+import { resolveFactoryLayout, type AssemblyLayout, type FactoryLayout } from '../layout'
 import { createPose, type CouplingPose, type CouplingRig } from '../rig'
 import { HydraulicAxleTrailer } from '../vehicles/HydraulicAxleTrailer'
 import { PullerTruck } from '../vehicles/PullerTruck'
+import { FactorySequence } from './FactorySequence'
 import { blendFogDepths, resolveFogDepthsPerStage } from './fogDepths'
 
 export interface CouplingStageProps {
@@ -121,21 +123,9 @@ function CameraRig({
 }
 
 /** Derives both vehicles' world transforms from the rig once per rendered frame, before anything reads them. */
-function PoseResolver({ rig, pose, layout, config }: { rig: CouplingRig; pose: CouplingPose; layout: AssemblyLayout; config: Scene01Config }) {
-  const path = useMemo(() => createDeparturePath(layout.pullerFinal, config.departure), [layout, config.departure])
-  const tracking = useMemo<TrailerTracking>(() => {
-    const hitchOffset = getModelEntry(config.models.puller).anchors.coupling[0] * config.models.scale
-    return {
-      hitchOffset,
-      // Measured from the resolved rest layout rather than the anchors alone, so the first frame of the departure
-      // reproduces the coupled rest pose exactly, whatever `assembly.connectedGap` or a final-position override says.
-      kingpinOffset: layout.trailerFinal[0] - layout.pullerFinal[0] - hitchOffset,
-      trackingLength: config.departure.trailerTrackingLength,
-    }
-  }, [config, layout])
-
+function PoseResolver({ rig, pose, factory }: { rig: CouplingRig; pose: CouplingPose; factory: FactoryLayout }) {
   useFrame(() => {
-    resolveCouplingPose(rig, path, tracking, pose)
+    resolveCouplingPose(rig, factory.journey.departure, factory.tracking, pose, factory.journey.parking)
   }, -2)
   return null
 }
@@ -167,7 +157,21 @@ export function CouplingStage({ rig, pose, layout, config = SCENE_01_CONFIG }: C
     () => (env.road.enabled && exitRoad.kerbGap ? [[exitRoad.kerbGap[0] - 0.1, exitRoad.kerbGap[1] + 0.1]] : []),
     [env.road.enabled, exitRoad],
   )
-  const farEdgeGap = env.road.enabled ? exitRoad.junction : null
+  // The factory's sequence: both paths, the parked combination and the loading geometry (one derivation, shared).
+  const factory = useMemo(() => resolveFactoryLayout(layout, config), [layout, config])
+  // The highway's far edge line breaks where the exit road and the factory driveway join it.
+  const farEdgeGaps = useMemo<ReadonlyArray<readonly [number, number]>>(() => {
+    const gaps: Array<readonly [number, number]> = []
+    if (env.road.enabled && exitRoad.junction) gaps.push(exitRoad.junction)
+    const fac = config.industry.factory
+    if (fac.enabled) {
+      const { driveway } = fac.building.forecourt
+      const [a] = worldToSlot(env.highway.slot, slotToWorld(fac.slot, [driveway.x0, driveway.toZ]))
+      const [b] = worldToSlot(env.highway.slot, slotToWorld(fac.slot, [driveway.x1, driveway.toZ]))
+      gaps.push([Math.min(a, b), Math.max(a, b)])
+    }
+    return gaps
+  }, [env.road.enabled, env.highway.slot, exitRoad, config.industry.factory])
 
   // Stable identity: FleetGarage re-clones its fade materials whenever this object changes.
   const garageFleet = useMemo(
@@ -176,6 +180,8 @@ export function CouplingStage({ rig, pose, layout, config = SCENE_01_CONFIG }: C
   )
   const getGarageOpacity = useCallback(() => rig.garage.opacity, [rig])
   const getDaylight = useCallback(() => rig.atmosphere.daylight, [rig])
+  const interiorKeyScale = config.parking.interiorLight.keyScale
+  const getKeyScale = useCallback(() => 1 - (1 - interiorKeyScale) * rig.atmosphere.interior, [rig, interiorKeyScale])
   // The yard floor takes on a daylight ground tone together with the sky and haze.
   const groundBlend = useMemo(() => ({ color: env.atmosphere.groundColor, getBlend: getDaylight }), [env.atmosphere.groundColor, getDaylight])
 
@@ -220,7 +226,7 @@ export function CouplingStage({ rig, pose, layout, config = SCENE_01_CONFIG }: C
       <DaylightSky sky={env.atmosphere.sky} getDaylight={getDaylight} />
       <ProceduralEnvironment intensity={config.lighting.environmentIntensity} />
       {/* Shadows (key-light frustum + contact-shadow plane) follow the combination's centre, so they stay compact and crisp. */}
-      <StageLighting lighting={config.lighting} shadowCentre={shadowCentre} getShadowOffset={getShadowOffset} />
+      <StageLighting lighting={config.lighting} shadowCentre={shadowCentre} getShadowOffset={getShadowOffset} getKeyScale={getKeyScale} />
       <YardFloor environment={env} groundY={groundY} shadowCentre={shadowCentre} getShadowOffset={getShadowOffset} groundBlend={groundBlend} />
 
       {/* Environment slots: independent, replaceable, fixed in the world. */}
@@ -257,7 +263,7 @@ export function CouplingStage({ rig, pose, layout, config = SCENE_01_CONFIG }: C
           name="highway"
           slot={env.highway.slot}
           showBounds={env.showSlotBounds}
-          placeholder={<Highway config={env.highway} groundY={localGround(env.highway.slot)} farEdgeGap={farEdgeGap} />}
+          placeholder={<Highway config={env.highway} groundY={localGround(env.highway.slot)} farEdgeGaps={farEdgeGaps} />}
         />
       )}
       {env.city.enabled && (
@@ -269,7 +275,9 @@ export function CouplingStage({ rig, pose, layout, config = SCENE_01_CONFIG }: C
         />
       )}
 
-      <PoseResolver rig={rig} pose={pose} layout={layout} config={config} />
+      <FactorySequence rig={rig} pose={pose} factory={factory} config={config} />
+
+      <PoseResolver rig={rig} pose={pose} factory={factory} />
       <CameraRig spec={config.camera} rig={rig} pose={pose} lengths={lengths} rest={rest} />
       <PullerTruck pose={pose} layout={layout} config={config} />
       <HydraulicAxleTrailer pose={pose} layout={layout} config={config} />

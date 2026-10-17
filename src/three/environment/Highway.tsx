@@ -21,8 +21,8 @@ export interface HighwayProps {
   config: HighwayConfig
   /** Y of the ground plane, slot-local. */
   groundY: number
-  /** Slot-local X range where the far edge line is omitted (the exit road's junction mouth). */
-  farEdgeGap?: readonly [number, number] | null
+  /** Slot-local X ranges where the far edge line is omitted (junction mouths of roads joining the far side). */
+  farEdgeGaps?: ReadonlyArray<readonly [number, number]>
 }
 
 const _matrix = new Matrix4()
@@ -32,15 +32,19 @@ const FLAT = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -Math.PI / 
 const _identity = new Quaternion()
 const _boxScale = new Vector3()
 
-/** Splits [−L/2, L/2] around an optional gap into the spans that remain. */
-function spansAround(length: number, gap: readonly [number, number] | null | undefined): Array<[number, number]> {
+/** Splits [−L/2, L/2] around the gaps into the spans that remain. */
+function spansAround(length: number, gaps: ReadonlyArray<readonly [number, number]> = []): Array<[number, number]> {
   const a = -length / 2
   const b = length / 2
-  if (!gap) return [[a, b]]
-  const [g0, g1] = gap[0] < gap[1] ? gap : [gap[1], gap[0]]
+  const sorted = gaps.map(([g0, g1]) => (g0 < g1 ? [g0, g1] : [g1, g0]) as [number, number]).sort((p, q) => p[0] - q[0])
   const out: Array<[number, number]> = []
-  if (g0 > a) out.push([a, Math.min(g0, b)])
-  if (g1 < b) out.push([Math.max(g1, a), b])
+  let cursor = a
+  for (const [g0, g1] of sorted) {
+    if (g1 <= cursor || g0 >= b) continue
+    if (g0 > cursor) out.push([cursor, g0])
+    cursor = Math.max(cursor, g1)
+  }
+  if (cursor < b) out.push([cursor, b])
   return out
 }
 
@@ -49,7 +53,7 @@ interface LightBox {
   size: [number, number, number]
 }
 
-/** Street-light boxes (poles, arms, lamp heads) along the far verge, skipping the excluded stretch. */
+/** Street-light boxes (poles, arms, lamp heads) along the far verge, skipping the excluded stretches. */
 function buildStreetLights(config: HighwayConfig, groundY: number): { poles: LightBox[]; lamps: LightBox[] } {
   const sl = config.streetLights
   const poles: LightBox[] = []
@@ -58,10 +62,10 @@ function buildStreetLights(config: HighwayConfig, groundY: number): { poles: Lig
   const carriageway = config.lanes * config.laneWidth
   // Centre of the far verge; the arm reaches back over the shoulder towards the road.
   const z = -(carriageway / 2 + config.shoulderWidth + config.vergeWidth / 2)
-  const [e0, e1] = sl.exclude[0] < sl.exclude[1] ? sl.exclude : [sl.exclude[1], sl.exclude[0]]
+  const excluded = (x: number) => sl.exclude.some(([a, b]) => x >= Math.min(a, b) && x <= Math.max(a, b))
   const half = config.length / 2
   for (let x = Math.ceil(-half / sl.spacing) * sl.spacing; x <= half; x += sl.spacing) {
-    if (x >= e0 && x <= e1) continue
+    if (excluded(x)) continue
     poles.push({ position: [x, groundY + sl.height / 2, z], size: [0.28, sl.height, 0.28] })
     poles.push({ position: [x, groundY + sl.height - 0.1, z + sl.armLength / 2], size: [0.16, 0.16, sl.armLength] })
     lamps.push({ position: [x, groundY + sl.height - 0.25, z + sl.armLength - 0.2], size: [0.36, 0.14, 0.7] })
@@ -88,7 +92,7 @@ function InstancedLightBoxes({ items, material, geometry, name }: { items: reado
   return <instancedMesh key={items.length} ref={ref} name={name} args={[geometry, material, items.length]} />
 }
 
-export function Highway({ config, groundY, farEdgeGap }: HighwayProps) {
+export function Highway({ config, groundY, farEdgeGaps }: HighwayProps) {
   const dashesRef = useRef<InstancedMesh>(null)
   const invalidate = useThree((state) => state.invalidate)
   const carriageway = config.lanes * config.laneWidth
@@ -127,10 +131,10 @@ export function Highway({ config, groundY, farEdgeGap }: HighwayProps) {
     const period = config.markings.dashLength + config.markings.dashGap
     const dashCount = Math.max(0, Math.floor(config.length / period))
     const dashX0 = -config.length / 2 + config.markings.dashLength / 2
-    const full = spansAround(config.length, null)
-    const farEdge = spansAround(config.length, farEdgeGap)
+    const full = spansAround(config.length)
+    const farEdge = spansAround(config.length, farEdgeGaps)
     return { shoulderZ, vergeZ, edgeZ, period, dashCount, dashX0, full, farEdge }
-  }, [config, carriageway, farEdgeGap])
+  }, [config, carriageway, farEdgeGaps])
 
   useLayoutEffect(() => {
     const mesh = dashesRef.current
