@@ -79,8 +79,7 @@ src/
     canvas/             SceneCanvas (DPR clamp, demand rendering, WebGL detection + fallback)
     camera/             responsive camera framing
     environment/        lighting rig, yard floor, environment slots and their procedural stand-ins
-                        (garage + wall sign, exit road, highway, procedural city bands — the city
-                        itself is the shipped city.glb), daylight sky
+                        (garage + wall sign, exit road, highway, city), daylight sky
     industrial/         procedural stand-ins for the closing sequence: industrial zone, Gemini Engi Fab
                         factory, pressure vessels, saddles, overhead crane, lifting rig (types.ts = contracts)
   animation/            GSAP registration, reduced-motion hook, pinned scrub timeline helper
@@ -93,14 +92,5 @@ docs/                   architecture, coordinate system, model replacement check
 ```
 
 Full explanation: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-
-## Third-party assets
-
-- The city behind the garage and along the highway is **"City" by Mateusz Woliński**
-  ([sketchfab.com/jeandiz](https://sketchfab.com/jeandiz)), from
-  [sketchfab.com/3d-models/city-1f50f0d6ec5a493d8e91d7db1106b324](https://sketchfab.com/3d-models/city-1f50f0d6ec5a493d8e91d7db1106b324),
-  licensed [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) — `public/models/environment/city.glb`,
-  tiled three times by `environment.city.slot.model`. The licence requires this attribution wherever the
-  site is published (a credits line in the footer or a credits page).
 
 Coordinate conventions: [`docs/COORDINATE-SYSTEM.md`](docs/COORDINATE-SYSTEM.md).

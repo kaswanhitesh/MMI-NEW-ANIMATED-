@@ -145,12 +145,6 @@ export interface CityConfig {
   seed: number
   /** Slot-local X range (m) the city covers: the whole travel plus the widest view. */
   span: readonly [number, number]
-  /**
-   * Slot-local X where the detailed city model (`slot.model`) ends, when it covers only part of `span`. The procedural
-   * bands beyond it are always drawn (with or without the model, see `splitCity`), so the city never stops in mid-air;
-   * the stand-in itself covers only the part the model replaces. Omitted = the model replaces the whole span.
-   */
-  modelEnd?: number
   skyline: CityBuildingBand & { landmarkChance: number; landmarkHeight: readonly [number, number] }
   midrise: CityBuildingBand
   industrial: CityBuildingBand & { stackChance: number; stackHeight: readonly [number, number] }

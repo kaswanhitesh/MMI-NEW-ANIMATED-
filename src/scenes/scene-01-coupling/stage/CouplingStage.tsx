@@ -24,7 +24,6 @@ import { useFramedCamera } from '../../../three/camera/useFramedCamera'
 import { AccessRoad } from '../../../three/environment/AccessRoad'
 import { BrandSign } from '../../../three/environment/BrandSign'
 import { CityBackdrop } from '../../../three/environment/CityBackdrop'
-import { splitCity } from '../../../three/environment/citySplit'
 import { DaylightSky } from '../../../three/environment/DaylightSky'
 import { EnvironmentSlot } from '../../../three/environment/EnvironmentSlot'
 import { FleetGarage } from '../../../three/environment/FleetGarage'
@@ -162,7 +161,6 @@ export function CouplingStage({ rig, pose, layout, config = SCENE_01_CONFIG }: C
   )
   // The factory's sequence: both paths, the parked combination and the loading geometry (one derivation, shared).
   const factory = useMemo(() => resolveFactoryLayout(layout, config), [layout, config])
-  const city = useMemo(() => splitCity(env.city), [env.city])
   // The highway's far edge line breaks where the exit road and the factory driveway join it.
   const farEdgeGaps = useMemo<ReadonlyArray<readonly [number, number]>>(() => {
     const gaps: Array<readonly [number, number]> = []
@@ -281,10 +279,8 @@ export function CouplingStage({ rig, pose, layout, config = SCENE_01_CONFIG }: C
           name="city"
           slot={env.city.slot}
           showBounds={env.showSlotBounds}
-          placeholder={<CityBackdrop config={city.standIn} groundY={localGround(env.city.slot)} />}
-        >
-          {city.beyondModel && <CityBackdrop name="city:beyond-model" config={city.beyondModel} groundY={localGround(env.city.slot)} />}
-        </EnvironmentSlot>
+          placeholder={<CityBackdrop config={env.city} groundY={localGround(env.city.slot)} />}
+        />
       )}
 
       <FactorySequence rig={rig} pose={pose} factory={factory} config={config} />

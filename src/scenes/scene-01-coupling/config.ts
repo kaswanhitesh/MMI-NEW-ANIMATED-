@@ -873,32 +873,11 @@ export const SCENE_01_CONFIG: Scene01Config = {
       slot: {
         position: [0, 0, -95],
         rotationY: 0,
-        // The extent of the detailed city below (slot-local); the procedural bands beyond `modelEnd` are outside it.
-        bounds: { min: [-1004, -3, -450], max: [204, 105, -50] },
-        // The detailed city: one 400 × 400 m block (Sketchfab "City" by Mateusz Woliński, CC BY 4.0 — see README,
-        // Third-party assets) tiled three times along the road at the pitch of its street base, from world x −1000 to
-        // 204 (nothing further west is ever in view). Every other tile is turned round (so neighbours differ) and 3 cm
-        // higher (its kerb strips reach 3.6 m into the next tile and must not z-fight with it). Its front edge is 50 m
-        // behind the slot origin (world z −145, 80 m behind the garage); street level 0.25 m above the ground plane;
-        // merged to one draw call per material per tile. It ends at `modelEnd`, where the city journey ends: from there
-        // the procedural bands take over — low sheds and mid-rise blocks up to the industrial area (x 330) and the
-        // distant skyline behind it — so the city thins out instead of stopping, and the industrial area and the
-        // factory have no towers right behind them. The procedural stand-in covers the model's part while the
-        // 14.5 MB file loads or if it is missing.
-        model: {
-          url: `${import.meta.env.BASE_URL}models/environment/city.glb`,
-          scale: 1,
-          position: [212.53, 0.37, 208.67],
-          rotation: [0, 0, 0],
-          castShadow: false,
-          receiveShadow: false,
-          mergeByMaterial: true,
-          instances: [-2, -1, 0].map((k) => ({ position: [k * 400, k % 2 ? 0.03 : 0, -250] as Vec3, rotationY: k % 2 ? Math.PI : 0 })),
-        },
+        bounds: { min: [-1200, 0, -845], max: [2400, 170, 0] },
+        model: null,
       },
       seed: 20251,
       span: [-1200, 2400],
-      modelEnd: 204,
       skyline: { zRange: [-365, -805], width: [18, 44], depth: [18, 36], height: [30, 78], gap: [1, 9], landmarkChance: 0.12, landmarkHeight: [90, 128] },
       // The nearer bands stop where the industrial area begins (x 330); the skyline continues behind it.
       midrise: { zRange: [-75, -165], width: [24, 55], depth: [16, 28], height: [14, 38], gap: [6, 22], span: [-1200, 330] },

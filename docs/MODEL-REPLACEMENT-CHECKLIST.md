@@ -124,22 +124,14 @@ stand-ins only establish the spatial relationships; replace them one at a time.
       (`docs/COORDINATE-SYSTEM.md`) or the trailer's swept path will leave the paving.
 - [ ] Highway and city: keep the highway's far lane centre at world z 28 (the vehicle's path) and the
       city entirely behind the garage (world z < −70) so nothing stands between the camera and the
-      vehicle. Together, the city model and the procedural bands beyond `city.modelEnd` must cover the
-      views of the garage and the city journey (world x −1000 … 330 at the widest aspect); a model that
-      covers only part of that sets `city.modelEnd` to the slot-local x where it ends, and the
-      procedural sheds, mid-rise blocks and skyline continue from there (always drawn, so the city
-      thins out instead of stopping). No towers may stand right behind the industrial area or the
-      factory (x 300 on): the drive leaves the city.
+      vehicle. The city must cover the views of the garage and the city journey (world x −1200 … 330 at
+      the widest aspect) and keep its near buildings out from behind the industrial area and the
+      factory (x 330 on), where only a distant skyline belongs: the drive leaves the city.
 - [ ] A model smaller than its slot can be repeated: `model.instances` lists every placement (it
       replaces the single default copy at the slot origin; slot-local position and yaw; the model's own
       `position` / `rotation` / `scale` apply inside each).
       Static scenery with many nodes should set `model.mergeByMaterial: true` (one draw call per
-      material per copy instead of one per node). The city is done this way: one 400 × 400 m block
-      (`city.glb`, CC BY 4.0 — see the README, "Third-party assets") placed three times at the pitch of
-      its street base from world x −1000 to 204 (`modelEnd`, where the city journey ends; the
-      procedural bands take over from there), alternate copies turned 180° and 3 cm higher (its
-      kerb strips overhang into the next copy), its street level lifted 0.25 m above the ground plane
-      so the two never z-fight.
+      material per copy instead of one per node).
 - [ ] Re-run the checks in section 6.
 
 ## 8. Replacing the factory, the crane and the cargo
