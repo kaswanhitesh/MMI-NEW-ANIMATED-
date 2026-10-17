@@ -12,10 +12,11 @@
  * Timeline time == scroll progress: the total duration is pinned to exactly 1,
  * phase windows from the config are placed at absolute positions and exposed as
  * labels (`initial`, `approach`, `couplingHold`, `establish`, `departure`,
- * `highwayHold`, `end`). Both vehicles travel during `approach` on the same
+ * `highwayHold`, `city`, `cityHold`, `end`). Both vehicles travel during `approach` on the same
  * window with the same ease; after the coupling hold and the establishing
  * pull-out, ONE scalar (`rig.departure.distance`) drives the U-turn and the
- * garage → highway crossfade. All tuning numbers come from the scene config.
+ * garage → highway crossfade; in the city phase `rig.city.travel` continues
+ * the drive while the camera travels with it and the city fades in. All tuning numbers come from the scene config.
  */
 import { invalidate } from '@react-three/fiber'
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
@@ -176,6 +177,19 @@ function populateTimeline(tl: gsap.core.Timeline, rig: CouplingRig, layout: Asse
   tl.to(rig.camera, { stage: 3, duration: Math.max(1e-4, DP.end - settleStart), ease: easing.cameraSettle }, settleStart)
 
   // Highway hold: nothing moves.
+
+  // City journey: the combination drives on along the highway (travel), the camera re-frames to the bottom-left
+  // city composition and travels with it (stage 3 → 4, follow 1), and the city, sky and daylight haze fade in.
+  // Everything is a function of scroll, so scrolling up restores the highway hold exactly.
+  const CI = phases.city
+  const { journey } = config
+  tl.to(rig.city, { travel: journey.travel, duration: len(CI), ease: easing.cityTravel }, CI.start)
+  tl.to(rig.camera, { stage: 4, duration: Math.max(1e-4, len(CI) * journey.cameraPortion), ease: easing.cityCamera }, CI.start)
+  if (config.environment.city.enabled) {
+    tl.to(rig.city, { opacity: 1, duration: Math.max(1e-4, len(CI) * journey.fadePortion), ease: easing.cityFade }, CI.start)
+  }
+
+  // City hold: nothing moves.
 }
 
 /**
@@ -214,9 +228,13 @@ export function useCouplingTimeline(options: UseCouplingTimelineOptions): Coupli
     const mountStatic = (): (() => void) => {
       setMode('static')
       const showFinal = config.reducedMotion.showFinalState
+      // The static frame is the highway hold or the city hold (config.reducedMotion.frame).
+      const cityFrame = config.reducedMotion.frame === 'city'
       const finalState = {
-        cameraStage: config.camera.sequence.length - 1,
+        cameraStage: config.camera.sequence.indexOf(cityFrame ? 'city' : 'highway'),
         departureDistance: createDeparturePath(layout.pullerFinal, config.departure).totalLength,
+        cityOpacity: cityFrame && config.environment.city.enabled ? 1 : 0,
+        cityTravel: cityFrame ? config.journey.travel : 0,
       }
       const state = showFinal ? createFinalRig(layout, finalState) : createInitialRig(layout)
       // Reduced motion must never hide copy: both overlays are fully visible, and the rig mirrors that so diagnostics agree with the DOM.
@@ -226,7 +244,7 @@ export function useCouplingTimeline(options: UseCouplingTimelineOptions): Coupli
       applyOverlayOpacity(hero.current, rig.overlay.heroOpacity)
       applyOverlayOpacity(caption.current, rig.overlay.captionOpacity)
       invalidate()
-      notifyPhase(showFinal ? 'highwayHold' : 'initial')
+      notifyPhase(showFinal ? (config.reducedMotion.frame === 'city' ? 'cityHold' : 'highwayHold') : 'initial')
       publishDebugHandle({ rig, layout, pose, timeline: null, scrollTrigger: undefined, mode: 'static' })
       return cleanupPresentation
     }
@@ -272,6 +290,7 @@ export function useCouplingTimeline(options: UseCouplingTimelineOptions): Coupli
         onRefresh: () => {
           applyOverlay()
           invalidate()
+          syncPhase(tl.progress())
         },
       })
       populateTimeline(tl, rig, layout, config)

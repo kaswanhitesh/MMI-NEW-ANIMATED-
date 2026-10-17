@@ -49,6 +49,44 @@ export interface YardEnvironmentConfig {
   garage: FleetGarageConfig
   /** Highway the combination departs onto; its opacity is driven by the scene's animation rig. */
   highway: HighwayConfig
+  /** City-edge backdrop (skyline, industry, infrastructure, sky and daylight haze) for the closing journey. */
+  city: CityConfig
+}
+
+/** A randomised band of buildings: positions and sizes are drawn from these ranges with a seeded generator. */
+export interface CityBuildingBand {
+  /** World Z range (m) of the band's building fronts; larger negative = further from the road. */
+  zRange: readonly [number, number]
+  width: readonly [number, number]
+  depth: readonly [number, number]
+  height: readonly [number, number]
+  /** Gap between neighbouring buildings along X (m). */
+  gap: readonly [number, number]
+}
+
+/**
+ * Procedural city edge seen beyond the highway: a distant skyline of towers (with occasional taller landmark
+ * towers and setback crowns), a band of mid-rise commercial blocks, low industrial sheds with stacks, an elevated
+ * metro viaduct and street lights along the highway's far verge, plus a daylight sky and haze. Boxes only, drawn
+ * through one InstancedMesh per material; a seeded generator keeps it identical on every load. Everything is
+ * behind the road from the camera's point of view; the haze (scene fog) gives it atmospheric depth.
+ */
+export interface CityConfig {
+  enabled: boolean
+  seed: number
+  /** World X range (m) the city covers: the whole travel plus the widest view (fog hides the ends). */
+  span: readonly [number, number]
+  skyline: CityBuildingBand & { landmarkChance: number; landmarkHeight: readonly [number, number] }
+  midrise: CityBuildingBand
+  industrial: CityBuildingBand & { stackChance: number; stackHeight: readonly [number, number] }
+  viaduct: { enabled: boolean; z: number; deckHeight: number; deckThickness: number; deckWidth: number; pierSpacing: number; pierSize: number }
+  streetLights: { enabled: boolean; z: number; spacing: number; height: number; armLength: number }
+  sky: { zenith: string; horizon: string; radius: number }
+  /** Daylight haze the scene fog blends to as the city appears. */
+  fog: { color: string; near: number; far: number }
+  /** Colour the yard/ground blends to in daylight. */
+  groundColor: string
+  colors: { glass: string; concrete: string; steel: string; industrial: string; roof: string; infrastructure: string }
 }
 
 /**

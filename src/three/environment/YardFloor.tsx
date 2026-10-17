@@ -9,7 +9,7 @@ import { ContactShadows } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Euler, Matrix4, Quaternion, Vector3, type InstancedMesh, type MeshBasicMaterial } from 'three'
+import { Color, Euler, Group, Matrix4, Quaternion, Vector3, type InstancedMesh, type MeshBasicMaterial, type MeshStandardMaterial } from 'three'
 import type { Vec3 } from '../assets/types'
 import type { YardEnvironmentConfig } from './types'
 
@@ -21,6 +21,10 @@ export interface YardFloorProps {
   shadowCentre?: Vec3
   /** Read every frame; multiplies the lane markings' opacity (e.g. to fade the yard out). Defaults to 1. */
   getMarkingsOpacity?: () => number
+  /** Read every frame: ground-plane offset (x, z, metres) of the contact-shadow plane, so it can follow moving vehicles. */
+  getShadowOffset?: () => readonly [number, number]
+  /** Optional colour the floor blends to; `getBlend` (0–1) is read every frame. */
+  groundBlend?: { color: string; getBlend: () => number }
 }
 
 /** Across-lane width of one marking stripe (m). */
@@ -114,8 +118,32 @@ function LaneMarkings({
   )
 }
 
-export function YardFloor({ environment, groundY, shadowCentre = ORIGIN, getMarkingsOpacity }: YardFloorProps) {
+export function YardFloor({ environment, groundY, shadowCentre = ORIGIN, getMarkingsOpacity, getShadowOffset, groundBlend }: YardFloorProps) {
   const { floor, markings, contactShadow } = environment
+  const shadowGroupRef = useRef<Group>(null)
+  const floorMaterialRef = useRef<MeshStandardMaterial>(null)
+  const last = useRef({ ox: Number.NaN, oz: Number.NaN, blend: Number.NaN })
+  const colors = useMemo(() => ({ base: new Color(floor.color), blend: new Color(groundBlend?.color ?? floor.color) }), [floor.color, groundBlend?.color])
+
+  // Contact shadows follow travelling vehicles; the floor colour follows the scene's daylight blend.
+  useFrame(() => {
+    if (getShadowOffset && shadowGroupRef.current) {
+      const [ox, oz] = getShadowOffset()
+      if (ox !== last.current.ox || oz !== last.current.oz) {
+        last.current.ox = ox
+        last.current.oz = oz
+        shadowGroupRef.current.position.x = ox
+        shadowGroupRef.current.position.z = oz
+      }
+    }
+    if (groundBlend && floorMaterialRef.current) {
+      const t = Math.min(1, Math.max(0, groundBlend.getBlend()))
+      if (t !== last.current.blend) {
+        last.current.blend = t
+        floorMaterialRef.current.color.copy(colors.base).lerp(colors.blend, t)
+      }
+    }
+  })
 
   return (
     <group name="yard-floor">
@@ -123,6 +151,7 @@ export function YardFloor({ environment, groundY, shadowCentre = ORIGIN, getMark
         <planeGeometry args={[floor.size, floor.size]} />
         {/* Not tone-mapped on purpose: the fogged horizon must land on exactly the clear colour, which tone mapping would darken. */}
         <meshStandardMaterial
+          ref={floorMaterialRef}
           color={floor.color}
           roughness={floor.roughness}
           metalness={floor.metalness}
@@ -135,6 +164,7 @@ export function YardFloor({ environment, groundY, shadowCentre = ORIGIN, getMark
       </mesh>
       <LaneMarkings markings={markings} groundY={groundY} getOpacity={getMarkingsOpacity} />
       {/* scale={1}: drei multiplies width/height by `scale` (default 10); the config values are metres already. */}
+      <group ref={shadowGroupRef}>
       <ContactShadows
         scale={1}
         position={[shadowCentre[0], groundY + CONTACT_SHADOW_LIFT, shadowCentre[2]]}
@@ -146,6 +176,7 @@ export function YardFloor({ environment, groundY, shadowCentre = ORIGIN, getMark
         resolution={contactShadow.resolution}
         frames={Infinity}
       />
+      </group>
     </group>
   )
 }

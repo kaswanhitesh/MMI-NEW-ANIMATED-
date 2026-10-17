@@ -30,7 +30,7 @@ export interface CouplingRig {
   camera: {
     /**
      * Position along the camera framing sequence (see config.camera.sequence):
-     * 0 = base, 1 = coupling push-in, 2 = wide establishing shot, 3 = highway. Fractions blend.
+     * 0 = base, 1 = coupling push-in, 2 = wide establishing shot, 3 = highway, 4 = city. Fractions blend.
      */
     stage: number
   }
@@ -51,6 +51,12 @@ export interface CouplingRig {
   departure: {
     /** Distance (m) the puller has travelled along the departure path; 0 = still at its coupling position. */
     distance: number
+  }
+  city: {
+    /** Opacity of the city, sky and daylight haze: 0 up to the highway hold, 1 for the city journey. */
+    opacity: number
+    /** Metres travelled along the highway beyond the departure path's end (the camera follows). */
+    travel: number
   }
   /** Overall timeline progress 0–1, mirrored for diagnostics / badges. */
   progress: number
@@ -74,6 +80,8 @@ export interface CouplingPose {
 export interface FinalRigState {
   cameraStage: number
   departureDistance: number
+  cityOpacity: number
+  cityTravel: number
 }
 
 function pos(v: Vec3): RigPosition {
@@ -90,11 +98,12 @@ export function createInitialRig(layout: AssemblyLayout): CouplingRig {
     garage: { opacity: 0 },
     highway: { opacity: 0 },
     departure: { distance: 0 },
+    city: { opacity: 0, travel: 0 },
     progress: 0,
   }
 }
 
-/** Rig in its completed state (combination parked on the highway) — used for reduced-motion rendering and tests. */
+/** Rig in a completed state (highway hold or city hold, see `FinalRigState`) — used for reduced-motion rendering and tests. */
 export function createFinalRig(layout: AssemblyLayout, final: FinalRigState): CouplingRig {
   return {
     puller: pos(layout.pullerFinal),
@@ -104,6 +113,7 @@ export function createFinalRig(layout: AssemblyLayout, final: FinalRigState): Co
     garage: { opacity: 0 },
     highway: { opacity: 1 },
     departure: { distance: final.departureDistance },
+    city: { opacity: final.cityOpacity, travel: final.cityTravel },
     progress: 1,
   }
 }
@@ -118,6 +128,8 @@ export function assignRig(into: CouplingRig, from: CouplingRig): void {
   into.garage.opacity = from.garage.opacity
   into.highway.opacity = from.highway.opacity
   into.departure.distance = from.departure.distance
+  into.city.opacity = from.city.opacity
+  into.city.travel = from.city.travel
   into.progress = from.progress
 }
 

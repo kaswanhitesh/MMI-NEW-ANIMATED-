@@ -84,10 +84,12 @@ const _a: PathPoint = { x: 0, z: 0, yaw: 0 }
 /**
  * Writes the vehicles' world transforms for the rig's current state into
  * `pose`. Before the departure (distance ≤ 0) the rig positions pass through
- * unchanged, so the approach choreography is untouched.
+ * unchanged, so the approach choreography is untouched. The city journey's
+ * travel is added to the departure distance: the final straight continues.
  */
 export function resolveCouplingPose(rig: CouplingRig, path: DeparturePath, tracking: TrailerTracking, pose: CouplingPose): void {
-  const s = rig.departure.distance
+  // The city journey simply drives on along the path's final straight (it continues beyond its nominal end).
+  const s = rig.departure.distance + rig.city.travel
   const { puller, trailer } = pose
   if (!(s > 0)) {
     puller.x = rig.puller.x

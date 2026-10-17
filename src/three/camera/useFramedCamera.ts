@@ -49,14 +49,45 @@ export function computeFramedCameraDistance(spec: FramedCameraSpec, framing: Cam
   return clamp(Math.max(byWidth, byHeight), spec.minDistance, f.maxDistance ?? spec.maxDistance)
 }
 
-/** World-space camera position and look-at target for one framing at the given aspect ratio. */
+/**
+ * World-space camera position and look-at target for one framing at the given aspect ratio. With a
+ * `screenOffset`, camera and target are panned together parallel to the image plane so that the framing's
+ * target point lands at that normalised screen position (exact for points at the target's depth).
+ */
 export function computeFramedCameraPose(spec: FramedCameraSpec, framing: CameraFraming, aspect: number): FramedCameraPose {
+  const f = resolveFraming(framing, aspect)
   const distance = computeFramedCameraDistance(spec, framing, aspect)
-  const [dx, dy, dz] = framing.direction
+  const [dx, dy, dz] = f.direction
   const length = Math.hypot(dx, dy, dz) || 1
-  const offset = resolveFraming(framing, aspect).targetOffset
+  const offset = f.targetOffset
   const target: Vec3 = [spec.target[0] + offset[0], spec.target[1] + offset[1], spec.target[2] + offset[2]]
   const position: Vec3 = [target[0] + (dx / length) * distance, target[1] + (dy / length) * distance, target[2] + (dz / length) * distance]
+  if (f.screenOffset && (f.screenOffset[0] !== 0 || f.screenOffset[1] !== 0)) {
+    const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1
+    const halfTan = Math.tan((spec.fov * DEG2RAD) / 2)
+    // View basis: forward points from the camera to the target; right = forward × worldUp; up = right × forward.
+    const fx = -dx / length
+    const fy = -dy / length
+    const fz = -dz / length
+    let rx = -fz
+    let rz = fx
+    const rl = Math.hypot(rx, rz) || 1
+    rx /= rl
+    rz /= rl
+    const ux = -rz * fy
+    const uy = rz * fx - rx * fz
+    const uz = rx * fy
+    // Moving the camera by −s·(half extent) along right/up puts the old target at NDC s.
+    const sx = f.screenOffset[0] * distance * halfTan * safeAspect
+    const sy = f.screenOffset[1] * distance * halfTan
+    const shiftX = -sx * rx - sy * ux
+    const shiftY = -sy * uy
+    const shiftZ = -sx * rz - sy * uz
+    return {
+      position: [position[0] + shiftX, position[1] + shiftY, position[2] + shiftZ],
+      target: [target[0] + shiftX, target[1] + shiftY, target[2] + shiftZ],
+    }
+  }
   return { position, target }
 }
 

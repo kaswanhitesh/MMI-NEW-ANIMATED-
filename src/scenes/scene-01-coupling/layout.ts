@@ -113,6 +113,16 @@ export function validateScene01Config(config: Scene01Config = SCENE_01_CONFIG, m
   if (!(dep.crossfadePortion > 0 && dep.crossfadePortion <= 1)) warnings.push('departure.crossfadePortion must be in (0, 1].')
   if (!(dep.cameraSettleStart >= 0 && dep.cameraSettleStart < 1)) warnings.push('departure.cameraSettleStart must be in [0, 1).')
   if (config.camera.sequence.length < 2) warnings.push('camera.sequence must list at least two framings.')
+  const j = config.journey
+  if (!(j.travel >= 0)) warnings.push('journey.travel must be ≥ 0.')
+  if (!(j.cameraPortion > 0 && j.cameraPortion <= 1) || !(j.fadePortion > 0 && j.fadePortion <= 1)) warnings.push('journey.cameraPortion and journey.fadePortion must be in (0, 1].')
+  if (config.camera.sequence.indexOf('highway') < 0 || config.camera.sequence.indexOf('city') !== config.camera.sequence.indexOf('highway') + 1) warnings.push("camera.sequence must contain 'highway' followed by 'city' (the timeline tweens the stage 3 → 4).")
+  // Level side views: a framing with a sideways direction component tilts every line along the travel axis.
+  for (const name of config.camera.sequence) {
+    if (Math.abs(config.camera.framings[name].direction[0]) > 1e-9) warnings.push(`camera.framings.${name}.direction[0] should be 0 for a level side view (lines along X would slant).`)
+  }
+  const cityFar = config.environment.city.sky.radius
+  if (config.environment.city.enabled && config.camera.far <= cityFar) warnings.push(`camera.far (${config.camera.far}) must exceed the city sky radius (${cityFar}).`)
 
   // 6. Entrances must actually travel in the documented directions.
   if (layout.pullerStart[0] >= layout.pullerFinal[0]) warnings.push('pullerStart must be at −X of the puller final position (it enters from the left).')

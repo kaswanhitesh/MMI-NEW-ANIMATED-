@@ -58,23 +58,27 @@ scroll position
    │  ScrollTrigger (pin + scrub)
    ▼
 GSAP timeline (duration 1, labels per phase)       ← config.phases / easing
-   │  initial → approach → couplingHold → establish → departure → highwayHold
+   │  initial → approach → couplingHold → establish → departure → highwayHold → city → cityHold
    │  approach: puller and trailer tween to their connected positions together; from 40% of it the
    │            fleet garage fades 0 → 1, reaching 1 as they arrive
    │  couplingHold / establish: camera stage 0 → 1 → 2 (push-in, then wide pull-out); caption in, then out
    │  departure: ONE scalar, departure.distance 0 → path length; garage 1 → 0 and highway 0 → 1 together
    │             over its first 35%; camera stage 2 → 3 as the combination settles on the highway
+   │  city: city.travel 0 → journey.travel extends the same path along the highway; camera stage 3 → 4
+   │        (the city framing follows the combination); city.opacity 0 → 1 fades the skyline and haze in
    │  tweens plain numbers on the rig
    ▼
-CouplingRig { puller, trailer, departure.distance, camera.stage, garage, highway, overlay.* }
+CouplingRig { puller, trailer, departure.distance, city.travel, city.opacity, camera.stage, garage,
+              highway, overlay.* }
    │  read every frame (demand frameloop; the timeline calls invalidate())
    ▼
 PoseResolver (departurePath.ts): rig → CouplingPose { puller, trailer: x, z, yaw }
    │  before the departure the approach positions pass straight through; during it the puller rides the
    │  path and the trailer's kingpin stays pinned to the fifth wheel while its rear tracks the path
    ▼
-R3F stage: vehicle groups copy the pose; useFramedCamera walks base → heroHold → wide → highway;
-           fog follows the framing; garage / highway / yard markings read their opacities;
+R3F stage: vehicle groups copy the pose; useFramedCamera walks base → heroHold → wide → highway → city;
+           fog follows the framing, then the city haze; garage / highway / city / yard markings read
+           their opacities; the key light and contact shadows follow the combination;
            overlay opacities are written to the DOM hero / caption elements
 ```
 
@@ -139,8 +143,10 @@ Engine-layer pieces (`SceneCanvas`, `useFramedCamera`, `StageLighting`, `YardFlo
   on every scrub update, components after imperative changes, the context-loss guard on restore.
   No rendering while the visitor reads.
 - **DPR clamp** — `[1, 2]` on fine-pointer devices, `[1, 1.5]` on coarse-pointer devices.
-- **Shadows** — one 2048² PCF shadow map on the key light, frustum fitted to the assembly area;
-  a drei `ContactShadows` plane grounds the vehicles. three r186 removed `PCFSoftShadowMap`, so the
+- **Shadows** — one 2048² PCF shadow map on the key light, frustum fitted to the combination
+  (`lighting.key.shadowExtent`); a drei `ContactShadows` plane grounds the vehicles. The key light,
+  its target and the contact-shadow plane move with the combination centre, so the shadows stay sharp
+  and present during the departure and the highway travel. three r186 removed `PCFSoftShadowMap`, so the
   key light's `shadow.radius` provides the softening.
 - **Tone mapping and the horizon** — ACES tone mapping darkens dark colours, and the renderer's
   clear colour is not tone-mapped, so a fogged floor would show its far edge as a line. The floor
@@ -156,18 +162,37 @@ Engine-layer pieces (`SceneCanvas`, `useFramedCamera`, `StageLighting`, `YardFlo
 - **Fog per framing** — the responsive camera backs off far on phones and in the wide framings;
   `stage/fogDepths.ts` pushes the fog band out past the framed subject for every framing and the stage
   blends the depths with the camera stage, so the vehicles never fog out.
+- **Level side views** — every camera framing looks along −Z (direction x = 0) with no roll, so any
+  line parallel to X (chassis rails, deck, garage beams, road edges) projects exactly horizontal. The
+  composition is moved by panning the camera parallel to the image plane: `targetOffset` moves the
+  target in world space and `screenOffset` places the target at a given screen position (normalised
+  device coordinates). The camera is never turned to reframe. `validateScene01Config` rejects a
+  framing whose direction has a non-zero x.
 - **Departure** — `departurePath.ts` is pure: a straight, a 180° left turn of `departure.turnRadius`
   and a straight onto the highway. The puller rides the path; the trailer is pinned at its kingpin to
   the puller's fifth wheel (manifest anchors) and points from a rear reference point further back along
   the path, the way a steered modular trailer tracks its tractor. One tweened distance drives both, so
   scrolling up replays exactly the same poses in reverse.
+- **City journey** — forward travel is real: `city.travel` adds to the departure distance, so the
+  combination keeps driving along the final straight and the road, its markings and the street lights
+  pass under it at the true speed, with no looping or texture scrolling. The `city` framing has
+  `follow: 1`, so the camera translates with the combination and it stays anchored bottom-left. The
+  backdrop (`src/three/environment/CityBackdrop.tsx`) is procedural: seeded rows of skyline towers,
+  mid-rise blocks and industrial sheds far behind the road, one instanced mesh per material, with
+  per-instance tone variation, plus street lights along the far verge and a camera-following gradient
+  sky sphere. It is long enough to cover the whole travel, so no edge or seam comes into view. Its
+  opacity, the daylight haze (fog colour and depths) and the ground colour blend in with `city.opacity`.
 - **Highway and ground layers** — `src/three/environment/Highway.tsx` lays a two-way road with a
-  generated grain texture, markings, shoulders and verges, plus the paved access road the scene derives
-  from the departure path (`describeAccessRoad`), which breaks the far verge at the junction. Layers are
-  separated by height so nothing coplanar can z-fight: floor (pushed back with a polygon offset), yard
-  markings 4 mm, access road 7 mm, highway 8 mm, paint 12 mm, contact shadows 20 mm.
-- **Reduced motion** — `gsap.matchMedia` renders the completed combination statically with all copy
-  visible; no pin, no scrub. CSS transitions are also disabled under the same media query.
+  generated grain texture (mipmapped, anisotropic), markings, shoulders and verges, plus the paved
+  access road the scene derives from the departure path (`describeAccessRoad`). The access road runs to
+  the end of the yard and is drawn above the far shoulder and verge, which stay continuous; only the
+  far edge line is broken at the junction. Layers are separated by height so nothing coplanar can
+  z-fight: floor (pushed back with a polygon offset), yard markings 4 mm, highway surfaces 7 mm,
+  access road 11 mm, paint 15 mm, contact shadows 20 mm.
+- **Reduced motion** — `gsap.matchMedia` renders a completed composition statically with all copy
+  visible; no pin, no scrub. `reducedMotion.frame` picks it: `'highway'` (the default, combination on
+  the right) or `'city'`. The default is the highway frame because the caption sits bottom-left, which
+  is where the city composition puts the vehicle. CSS transitions are also disabled under the same media query.
 - **No WebGL** — `SceneCanvas` probes first and renders a same-size text fallback; a runtime
   renderer failure hits the canvas error boundary and shows the same fallback.
 - **Resize** — ScrollTrigger refreshes with `invalidateOnRefresh`; mobile address-bar resizes are

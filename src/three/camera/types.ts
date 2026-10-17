@@ -24,10 +24,16 @@ export interface CameraFraming {
    */
   follow?: number
   /**
+   * Where the framing's target should appear on screen, in normalised device coordinates (x: −1 left … 1 right,
+   * y: −1 bottom … 1 top). The camera pans parallel to the image plane to put it there, so the composition holds
+   * on every aspect ratio and distance without changing the viewing angle. Omit for a centred target.
+   */
+  screenOffset?: readonly [x: number, y: number]
+  /**
    * Overrides applied on portrait viewports (aspect < 1). Use it to centre a composition that is right-aligned
    * on landscape screens, or to tighten / loosen the fit where the narrow width would otherwise dominate.
    */
-  portrait?: Partial<Pick<CameraFraming, 'targetOffset' | 'fitWidth' | 'fitHeight' | 'maxDistance' | 'follow'>>
+  portrait?: Partial<Pick<CameraFraming, 'targetOffset' | 'fitWidth' | 'fitHeight' | 'maxDistance' | 'follow' | 'screenOffset'>>
 }
 
 export interface FramedCameraSpec<N extends string = string> {

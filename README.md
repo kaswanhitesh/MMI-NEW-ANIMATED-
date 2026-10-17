@@ -3,7 +3,7 @@
 Scroll-driven, cinematic 3D website for **Mega Move India Private Limited**, an Indian
 project-logistics and heavy-haul transportation company. This milestone delivers the production
 foundation and **Scene 01: a puller truck and a hydraulic axle trailer close on each other, couple in
-MMI's fleet garage, then depart and U-turn onto the highway**, with an
+MMI's fleet garage, depart and U-turn onto the highway, then travel towards a city skyline**, with an
 extensible architecture for the four scenes that follow.
 
 Stack: React 19 · Vite 8 · TypeScript · three.js · React Three Fiber · drei · GSAP + ScrollTrigger · plain CSS.
@@ -18,8 +18,10 @@ npm run dev          # http://localhost:5173
 Scroll down through the first screen: the puller enters from the left and the trailer from the right
 at the same time and they couple as MMI's fleet garage appears behind them. The camera then pulls
 out, and the coupled combination drives off, makes a broad left U-turn while the garage gives way to
-a highway, and settles on the right of the frame with the left side left clear. Scroll up and every
-step reverses.
+a highway, and settles on the right of the frame with the left side left clear. Scrolling on, the
+camera moves with the combination as it drives along the highway, an Indian city-edge skyline fades
+in behind the road, and the shot ends with the combination low on the left and the right side clear.
+Every shot is a level side view. Scroll up and every step reverses.
 
 Other scripts:
 

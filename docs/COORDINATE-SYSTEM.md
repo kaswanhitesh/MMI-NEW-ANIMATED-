@@ -23,6 +23,9 @@ Everything in the 3D scenes is expressed in **metres** in a right-handed, **Y-up
   puller drives forward (−X) for `departure.straightOut`, makes a 180° **left** turn of radius
   `departure.turnRadius` (towards +Z, i.e. towards the camera), then drives `departure.straightIn`
   along +X onto the highway, where it ends in the far lane (left-hand traffic) facing +X.
+- During the **city** phase the same path continues along +X for `journey.travel` metres. The city
+  backdrop stands far behind the road, at negative Z, so it never comes between the camera and the
+  vehicle.
 
 ### Yaw convention during the departure
 
@@ -64,13 +67,25 @@ towards the camera and a **fit width / fit height** in metres. The actual distan
 runtime for the viewport's aspect ratio, so phones (portrait) and ultra-wides both keep the whole
 combination in frame. The named framings are walked in `camera.sequence` order by one tweened
 "stage" value: `base` (approach), `heroHold` (push-in while coupled), `wide` (establishing shot that
-holds the whole U-turn) and `highway` (final shot, combination on the right, left ~40% clear). A
-framing may set its own `maxDistance` and `portrait` overrides (target, fit, distance) for narrow
-screens, where the final shot centres the combination instead of right-aligning it.
+holds the whole U-turn), `highway` (combination on the right, left ~40% clear) and `city` (final shot,
+combination in the lower third on the left, right ~40–45% clear).
+
+Every framing's direction has **x = 0**: the camera looks straight along −Z, tilted down only, with
+no roll. Lines parallel to X therefore stay horizontal on screen. To place the subject, a framing
+moves the camera parallel to the image plane, never turns it:
+
+- `targetOffset` moves the look-at point in world metres.
+- `screenOffset` puts the look-at point at a screen position in normalised device coordinates
+  (−1 to 1; `[-0.39, -0.56]` is left of centre and low).
+- `follow` (0–1) makes the camera translate with the combination's displacement from its coupled rest
+  position, so a moving combination keeps its place on screen.
+
+A framing may also set its own `maxDistance` and `portrait` overrides (target, fit, distance, follow,
+screen offset) for narrow screens.
 
 ## Scroll → timeline
 
 The pinned section maps scroll position to timeline progress 0–1 (`scroll.distanceVh` viewport
 heights of scrolling). Phase windows in `SCENE_01_CONFIG.phases` are fractions of that progress and
 become GSAP labels of the same name (`initial`, `approach`, `couplingHold`, `establish`,
-`departure`, `highwayHold`, plus `end`).
+`departure`, `highwayHold`, `city`, `cityHold`, plus `end`).

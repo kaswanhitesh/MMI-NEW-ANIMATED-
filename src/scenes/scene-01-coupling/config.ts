@@ -23,10 +23,10 @@ import type { FramedCameraSpec } from '../../three/camera/types'
 import type { RenderingConfig } from '../../three/canvas/types'
 import type { StageLightingConfig, YardEnvironmentConfig } from '../../three/environment/types'
 
-export type Scene01PhaseName = 'initial' | 'approach' | 'couplingHold' | 'establish' | 'departure' | 'highwayHold'
+export type Scene01PhaseName = 'initial' | 'approach' | 'couplingHold' | 'establish' | 'departure' | 'highwayHold' | 'city' | 'cityHold'
 
 /** Named camera framings, in the order the camera stage walks through them. */
-export type Scene01CameraFraming = 'base' | 'heroHold' | 'wide' | 'highway'
+export type Scene01CameraFraming = 'base' | 'heroHold' | 'wide' | 'highway' | 'city'
 
 export interface PhaseWindow {
   /** Timeline progress (0–1) where the phase starts. */
@@ -86,6 +86,15 @@ export interface Scene01Config {
     /** Fraction of the departure phase at which the camera starts settling from `wide` to `highway` (≈ the turn exit). */
     cameraSettleStart: number
   }
+  /** The closing journey: the combination drives on along the highway into the city while the camera tracks it. */
+  journey: {
+    /** Metres travelled along the highway during the `city` phase (the camera follows, so the world passes by). */
+    travel: number
+    /** Fraction of the city phase over which the camera re-frames from `highway` to `city`. */
+    cameraPortion: number
+    /** Fraction of the city phase over which the city, sky and daylight haze fade in. */
+    fadePortion: number
+  }
   /** Stage lighting. Light positions are ABSOLUTE world positions in metres, not relative to the vehicles. */
   lighting: StageLightingConfig
   /** Background/fog colour, yard floor, markings and contact shadow. */
@@ -118,6 +127,12 @@ export interface Scene01Config {
     crossfade: string
     /** Ease of the final camera settle onto the highway composition. */
     cameraSettle: string
+    /** Ease of the city / sky / haze fade-in. */
+    cityFade: string
+    /** Ease of the travel along the highway (gentle start from the highway hold, gentle stop into the final hold). */
+    cityTravel: string
+    /** Ease of the camera re-framing onto the bottom-left city composition. */
+    cityCamera: string
     overlay: string
   }
   overlay: {
@@ -130,8 +145,14 @@ export interface Scene01Config {
   }
   rendering: RenderingConfig
   reducedMotion: {
-    /** When the user prefers reduced motion: skip scrubbing and show the completed combination statically. */
+    /** When the user prefers reduced motion: skip scrubbing and show a completed composition statically. */
     showFinalState: boolean
+    /**
+     * Which completed composition: 'highway' (combination on the right, left clear) or 'city' (bottom-left).
+     * 'highway' by default because reduced-motion users see the hero copy and caption, and the caption sits
+     * bottom-left — exactly where the city composition puts the vehicle.
+     */
+    frame: 'highway' | 'city'
   }
   placeholders: {
     /** Show an on-screen badge whenever TEMPORARY placeholder geometry is standing in for a missing GLB. */
@@ -162,36 +183,53 @@ export const SCENE_01_CONFIG: Scene01Config = {
   camera: {
     fov: 30,
     near: 0.5,
-    far: 420,
+    // Far enough for the daylight sky dome (radius 1200 m) that surrounds the camera in the city phase.
+    far: 1500,
     target: [0.5, 1.4, 0],
+    // LEVEL SIDE VIEWS: every framing looks straight along −Z (direction x = 0) with only a downward tilt, so
+    // the camera has no yaw or roll relative to the vehicle's travel axis and every line parallel to X — chassis,
+    // decks, road edges, garage frontage — projects perfectly horizontal. Composition is set by moving the
+    // camera parallel to the image plane (targetOffset / screenOffset), never by turning it.
     framings: {
-      // Approach: both vehicles and the garage facade in frame.
-      base: { direction: [0.34, 0.27, 1], fitWidth: 40, fitHeight: 11, targetOffset: [0, 0, 0] },
+      // Approach: both vehicles and the garage frontage in frame.
+      base: { direction: [0, 0.26, 1], fitWidth: 40, fitHeight: 11, targetOffset: [0, 0, 0] },
       // Coupling hold: a subtle push-in, never a cut.
-      heroHold: { direction: [0.3, 0.22, 1], fitWidth: 34, fitHeight: 10, targetOffset: [0, 0.2, 0] },
+      heroHold: { direction: [0, 0.21, 1], fitWidth: 34, fitHeight: 10, targetOffset: [0, 0.2, 0] },
       // Establishing shot: pulls out and re-centres over the turning area. During the departure it TRACKS the
       // combination (follow 0.8: the camera moves with 80% of its displacement, so the vehicle still visibly
       // travels across the frame) and the whole U-turn stays in frame on every aspect ratio.
       wide: {
-        direction: [0.34, 0.27, 1],
+        direction: [0, 0.27, 1],
         fitWidth: 62,
         fitHeight: 22,
         targetOffset: [-8, -0.2, 11],
         follow: 0.8,
         portrait: { fitWidth: 46, maxDistance: 210, targetOffset: [-6, -0.2, 13], follow: 1 },
       },
-      // Final: the combination parked on the highway on the RIGHT, the left ~38% of the frame kept clear for
-      // future content. Static (no follow) so the end composition is exactly this. On portrait screens the
-      // combination is centred instead (it already fills most of the width there).
+      // Highway hold: the combination parked on the highway on the RIGHT, the left ~38% of the frame clear.
+      // Static (no follow). On portrait screens the combination is centred instead.
       highway: {
-        direction: [0.3, 0.2, 1],
-        fitWidth: 50,
+        direction: [0, 0.18, 1],
+        fitWidth: 48,
         fitHeight: 16,
-        targetOffset: [6.5, -0.2, 29.9],
+        targetOffset: [5.7, -0.2, 29.9],
         portrait: { fitWidth: 32, maxDistance: 210, targetOffset: [13, -0.2, 29.9] },
       },
+      // City journey (final): the combination anchored in the lower third on the LEFT, the right ~44% of the frame
+      // clear for future content. follow 1 = the camera travels with it, so the city passes behind. With follow 1
+      // the target is the combination's centre: targetOffset compensates the difference between camera.target and
+      // the combination's coupled rest centre (x 0.275, z 0), and screenOffset places that centre on screen.
+      city: {
+        direction: [0, 0.1, 1],
+        fitWidth: 50,
+        fitHeight: 18,
+        targetOffset: [-0.225, 0.1, 0],
+        follow: 1,
+        screenOffset: [-0.39, -0.56],
+        portrait: { fitWidth: 48, maxDistance: 250, screenOffset: [-0.38, -0.5] },
+      },
     },
-    sequence: ['base', 'heroHold', 'wide', 'highway'],
+    sequence: ['base', 'heroHold', 'wide', 'highway', 'city'],
     minDistance: 20,
     maxDistance: 140,
   },
@@ -205,6 +243,12 @@ export const SCENE_01_CONFIG: Scene01Config = {
     cameraSettleStart: 0.5,
   },
 
+  journey: {
+    travel: 180,
+    cameraPortion: 0.45,
+    fadePortion: 0.55,
+  },
+
   lighting: {
     hemisphere: { skyColor: '#c9d3df', groundColor: '#2b2e33', intensity: 0.75 },
     key: {
@@ -213,7 +257,7 @@ export const SCENE_01_CONFIG: Scene01Config = {
       intensity: 2.6,
       castShadow: true,
       shadowMapSize: 2048,
-      shadowExtent: 44,
+      shadowExtent: 26,
       shadowBias: -0.0002,
       shadowNormalBias: 0.05,
       shadowRadius: 3,
@@ -227,9 +271,9 @@ export const SCENE_01_CONFIG: Scene01Config = {
   environment: {
     backgroundColor: '#0e1013',
     fog: { near: 48, far: 130 },
-    floor: { size: 320, color: '#17191d', roughness: 0.94, metalness: 0.04, envMapIntensity: 0.35 },
+    floor: { size: 2600, color: '#17191d', roughness: 0.94, metalness: 0.04, envMapIntensity: 0.35 },
     markings: { color: '#454b53', opacity: 0.6, laneHalfWidth: 2.4, length: 90, stripeLength: 2.4, stripeGap: 1.6 },
-    contactShadow: { opacity: 0.55, blur: 2.2, width: 130, height: 72, far: 3, resolution: 1024 },
+    contactShadow: { opacity: 0.55, blur: 2.2, width: 80, height: 40, far: 3, resolution: 1024 },
     // Cinematic backdrop: the MMI fleet garage. Invisible while the vehicles enter, fades in from 40% of the
     // approach and is fully visible the moment they couple. The facade stands 26 m behind the coupling line.
     garage: {
@@ -285,7 +329,7 @@ export const SCENE_01_CONFIG: Scene01Config = {
     highway: {
       enabled: true,
       centreZ: 29.9,
-      length: 600,
+      length: 2600,
       lanes: 2,
       laneWidth: 3.75,
       shoulderWidth: 2,
@@ -299,10 +343,28 @@ export const SCENE_01_CONFIG: Scene01Config = {
       // the carriageway at the junction.
       access: { width: 10.5, rearMargin: 2, runToRoadEnd: true, overlap: 0.05 },
     },
+    // City edge for the closing journey, layered for depth: low industry 80–120 m behind the highway's far side,
+    // mid-rise commercial blocks at 170–260 m, and a deep skyline band at 460–900 m that the daylight haze softens into
+    // silhouettes. Street lights on the far verge give the strongest sense of passing. The viaduct is available
+    // but off by default (it read as a heavy band across the frame).
+    city: {
+      enabled: true,
+      seed: 20251,
+      span: [-560, 760],
+      skyline: { zRange: [-460, -900], width: [18, 44], depth: [18, 36], height: [30, 78], gap: [1, 9], landmarkChance: 0.12, landmarkHeight: [90, 128] },
+      midrise: { zRange: [-170, -260], width: [24, 55], depth: [16, 28], height: [14, 38], gap: [6, 22] },
+      industrial: { zRange: [-80, -120], width: [34, 80], depth: [18, 30], height: [6, 12], gap: [10, 34], stackChance: 0.3, stackHeight: [24, 38] },
+      viaduct: { enabled: false, z: -44, deckHeight: 11, deckThickness: 1.6, deckWidth: 9, pierSpacing: 30, pierSize: 2.2 },
+      streetLights: { enabled: true, z: 22.9, spacing: 36, height: 10, armLength: 2.6 },
+      sky: { zenith: '#56616d', horizon: '#9aa3ac', radius: 1200 },
+      fog: { color: '#959ea7', near: 200, far: 1150 },
+      groundColor: '#2c2f33',
+      colors: { glass: '#5f6b77', concrete: '#7b8086', steel: '#4b525a', industrial: '#4f545b', roof: '#3d4248', infrastructure: '#6c727a' },
+    },
   },
 
   scroll: {
-    distanceVh: 6.4,
+    distanceVh: 8.6,
     scrub: 0.9,
     anticipatePin: 1,
     markers: false,
@@ -310,17 +372,21 @@ export const SCENE_01_CONFIG: Scene01Config = {
 
   phases: {
     /** Opening composition: both vehicles wait outside the frame. */
-    initial: { start: 0, end: 0.04 },
+    initial: { start: 0, end: 0.03 },
     /** Both vehicles travel towards the coupling point over the SAME window and arrive together. */
-    approach: { start: 0.04, end: 0.4 },
+    approach: { start: 0.03, end: 0.3 },
     /** Coupled: subtle camera push-in and the caption reveal; the garage stays visible. */
-    couplingHold: { start: 0.4, end: 0.48 },
+    couplingHold: { start: 0.3, end: 0.36 },
     /** Wide establishing shot: the camera pulls out; nothing moves yet; the caption fades out. */
-    establish: { start: 0.48, end: 0.57 },
+    establish: { start: 0.36, end: 0.425 },
     /** The combination drives off, U-turns towards the camera and settles on the highway; garage → highway crossfade. */
-    departure: { start: 0.57, end: 0.92 },
-    /** Final hold on the highway composition. */
-    highwayHold: { start: 0.92, end: 1 },
+    departure: { start: 0.425, end: 0.685 },
+    /** Short hold on the highway composition (combination on the right). */
+    highwayHold: { start: 0.685, end: 0.73 },
+    /** The combination drives on into the city: camera re-frames bottom-left and travels with it; city fades in. */
+    city: { start: 0.73, end: 0.93 },
+    /** Final hold on the city composition (combination bottom-left, right side clear). */
+    cityHold: { start: 0.93, end: 1 },
   },
 
   easing: {
@@ -331,6 +397,9 @@ export const SCENE_01_CONFIG: Scene01Config = {
     departure: 'power2.inOut',
     crossfade: 'power1.inOut',
     cameraSettle: 'power1.inOut',
+    cityFade: 'power1.inOut',
+    cityTravel: 'power1.inOut',
+    cityCamera: 'power1.inOut',
     overlay: 'power1.out',
   },
 
@@ -348,10 +417,19 @@ export const SCENE_01_CONFIG: Scene01Config = {
     powerPreference: 'high-performance',
   },
 
-  reducedMotion: { showFinalState: true },
+  reducedMotion: { showFinalState: true, frame: 'highway' },
 
   placeholders: { showBadge: true },
 }
 
 /** Ordered list of phase names, used to build timeline labels in a stable order. */
-export const SCENE_01_PHASE_ORDER: readonly Scene01PhaseName[] = ['initial', 'approach', 'couplingHold', 'establish', 'departure', 'highwayHold']
+export const SCENE_01_PHASE_ORDER: readonly Scene01PhaseName[] = [
+  'initial',
+  'approach',
+  'couplingHold',
+  'establish',
+  'departure',
+  'highwayHold',
+  'city',
+  'cityHold',
+]

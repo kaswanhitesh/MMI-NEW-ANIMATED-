@@ -8,9 +8,10 @@
  *
  * Ground layers are separated by height so nothing coplanar can z-fight, and
  * the scene's yard floor pushes itself back with a polygon offset:
- *   floor 0 · yard markings 4 mm · access road 7 mm · highway 8 mm · paint 12 mm · contact shadows 20 mm.
- * The access road tucks a few centimetres under the carriageway so the joint
- * never cracks. Everything lies below the contact-shadow plane, so vehicle
+ *   floor 0 · yard markings 4 mm · highway surfaces 7 mm · access road 11 mm · paint 15 mm · contact shadows 20 mm.
+ * The access road lies ON TOP of the far shoulder and verge, so where it crosses them it simply covers them
+ * (a natural junction); it stops a few centimetres into the carriageway so that joint never cracks. Only
+ * the far edge line is broken across the junction mouth. Everything lies below the contact-shadow plane, so vehicle
  * shadows fall onto the road; the meshes also receive the key-light shadow.
  *
  * `getOpacity()` is read every rendered frame and written to the materials,
@@ -24,6 +25,8 @@ import {
   DataTexture,
   Group,
   InstancedMesh,
+  LinearFilter,
+  LinearMipmapLinearFilter,
   Matrix4,
   MeshStandardMaterial,
   Quaternion,
@@ -40,7 +43,7 @@ import type { HighwayConfig } from './types'
 export interface HighwayAccessRoad {
   /** Closed outline in world XZ (metres). */
   outline: ReadonlyArray<readonly [number, number]>
-  /** X range where it meets the far side of the highway; that stretch of far verge, shoulder and edge line is omitted. */
+  /** X range where it meets the far side of the highway; that stretch of the far edge line is omitted. */
   junction: readonly [number, number] | null
 }
 
@@ -55,9 +58,9 @@ export interface HighwayProps {
 }
 
 /** Heights above the ground plane (m); see the layer table above. */
-const ACCESS_LIFT = 0.007
-const ROAD_LIFT = 0.008
-const PAINT_LIFT = 0.012
+const ROAD_LIFT = 0.007
+const ACCESS_LIFT = 0.011
+const PAINT_LIFT = 0.015
 /** Grain texture size; one tile covers GRAIN_TILE metres. */
 const GRAIN_SIZE = 128
 const GRAIN_TILE = 7
@@ -96,6 +99,11 @@ function createGrainTexture(strength: number): DataTexture {
   texture.wrapS = RepeatWrapping
   texture.wrapT = RepeatWrapping
   texture.colorSpace = SRGBColorSpace
+  // Mipmapped, trilinear and anisotropic: point-sampled noise at grazing angles would shimmer while scrolling.
+  texture.magFilter = LinearFilter
+  texture.minFilter = LinearMipmapLinearFilter
+  texture.generateMipmaps = true
+  texture.anisotropy = 8
   texture.needsUpdate = true
   return texture
 }
@@ -221,8 +229,8 @@ export function Highway({ config, groundY, getOpacity, access }: HighwayProps) {
       {nearSpans.map(([x0, x1], i) => strip(`near-shoulder-${i}`, x0, x1, z + shoulderZ, shoulderWidth, ROAD_LIFT, materials.shoulder, ORDER_SURFACE))}
       {nearSpans.map(([x0, x1], i) => strip(`near-verge-${i}`, x0, x1, z + vergeZ, vergeWidth, ROAD_LIFT, materials.verge, ORDER_SURFACE))}
       {nearSpans.map(([x0, x1], i) => strip(`near-edge-${i}`, x0, x1, z + edgeZ, markings.lineWidth, PAINT_LIFT, materials.edgeLine, ORDER_PAINT))}
-      {farSpans.map(([x0, x1], i) => strip(`far-shoulder-${i}`, x0, x1, z - shoulderZ, shoulderWidth, ROAD_LIFT, materials.shoulder, ORDER_SURFACE))}
-      {farSpans.map(([x0, x1], i) => strip(`far-verge-${i}`, x0, x1, z - vergeZ, vergeWidth, ROAD_LIFT, materials.verge, ORDER_SURFACE))}
+      {nearSpans.map(([x0, x1], i) => strip(`far-shoulder-${i}`, x0, x1, z - shoulderZ, shoulderWidth, ROAD_LIFT, materials.shoulder, ORDER_SURFACE))}
+      {nearSpans.map(([x0, x1], i) => strip(`far-verge-${i}`, x0, x1, z - vergeZ, vergeWidth, ROAD_LIFT, materials.verge, ORDER_SURFACE))}
       {farSpans.map(([x0, x1], i) => strip(`far-edge-${i}`, x0, x1, z - edgeZ, markings.lineWidth, PAINT_LIFT, materials.edgeLine, ORDER_PAINT))}
       {dashCount > 0 && (
         <instancedMesh key={dashCount} ref={dashesRef} name="highway-centre-dashes" args={[undefined, undefined, dashCount]} material={materials.centreLine} renderOrder={ORDER_PAINT} receiveShadow>
@@ -230,7 +238,7 @@ export function Highway({ config, groundY, getOpacity, access }: HighwayProps) {
         </instancedMesh>
       )}
       {accessShape && (
-        <mesh name="highway-access-road" position={[0, groundY + ACCESS_LIFT, 0]} rotation={FLAT_EULER} material={materials.access} renderOrder={ORDER_SURFACE} receiveShadow>
+        <mesh name="highway-access-road" position={[0, groundY + ACCESS_LIFT, 0]} rotation={FLAT_EULER} material={materials.access} renderOrder={ORDER_SURFACE + 0.5} receiveShadow>
           <shapeGeometry args={[accessShape, 1]} />
         </mesh>
       )}

@@ -7,7 +7,7 @@
  * metres; the key light aims at `shadowCentre` through an explicit target
  * object that is mounted in the scene so its world matrix stays current.
  */
-import { useThree } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { Object3D, type DirectionalLight } from 'three'
 import type { Vec3 } from '../assets/types'
@@ -17,6 +17,11 @@ export interface StageLightingProps {
   lighting: StageLightingConfig
   /** World point (m) the key light aims at and its shadow frustum is centred on. */
   shadowCentre: Vec3
+  /**
+   * Read every frame: ground-plane offset (x, z, metres) applied to the key light, its target and therefore its
+   * shadow frustum, so shadows follow moving vehicles. The light's direction is unchanged. Defaults to none.
+   */
+  getShadowOffset?: () => readonly [number, number]
 }
 
 /** Hemisphere light height; only its orientation (straight down) matters, so the value is not tuned. */
@@ -29,7 +34,7 @@ const HEMISPHERE_HEIGHT = 50
  */
 const SHADOW_DEPTH_FACTOR = 1.5
 
-export function StageLighting({ lighting, shadowCentre }: StageLightingProps) {
+export function StageLighting({ lighting, shadowCentre, getShadowOffset }: StageLightingProps) {
   const { hemisphere, key, fill, rim } = lighting
   const keyRef = useRef<DirectionalLight>(null)
   const target = useMemo(() => new Object3D(), [])
@@ -66,8 +71,22 @@ export function StageLighting({ lighting, shadowCentre }: StageLightingProps) {
       }
     }
     shadow.needsUpdate = true
+    lastOffset.current = [Number.NaN, Number.NaN]
     invalidate()
   }, [key, shadowCentre, target, invalidate])
+
+  // Translate light + target together so shadows follow moving vehicles; skipped while the offset is unchanged.
+  const lastOffset = useRef<[number, number]>([Number.NaN, Number.NaN])
+  useFrame(() => {
+    const light = keyRef.current
+    if (!light || !getShadowOffset) return
+    const [ox, oz] = getShadowOffset()
+    if (ox === lastOffset.current[0] && oz === lastOffset.current[1]) return
+    lastOffset.current = [ox, oz]
+    light.position.set(key.position[0] + ox, key.position[1], key.position[2] + oz)
+    target.position.set(shadowCentre[0] + ox, shadowCentre[1], shadowCentre[2] + oz)
+    target.updateMatrixWorld()
+  })
 
   return (
     <>
