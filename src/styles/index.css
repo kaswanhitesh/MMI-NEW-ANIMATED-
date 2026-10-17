@@ -1,0 +1,9 @@
+/**
+ * Stylesheet entry — imports the layers in cascade order:
+ * tokens (custom properties) → base (reset, typography) → layout (shell,
+ * sections) → scene (pinned scene contract). Vite inlines these at build.
+ */
+@import './tokens.css';
+@import './base.css';
+@import './layout.css';
+@import './scene.css';

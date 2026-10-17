@@ -20,6 +20,8 @@
  */
 import type { ModelId, Vec3 } from '../../three/assets/types'
 import type { FramedCameraSpec } from '../../three/camera/types'
+import type { RenderingConfig } from '../../three/canvas/types'
+import type { StageLightingConfig, YardEnvironmentConfig } from '../../three/environment/types'
 
 export type Scene01PhaseName = 'initial' | 'pullerEntrance' | 'trailerEntrance' | 'connection' | 'heroHold'
 
@@ -69,33 +71,10 @@ export interface Scene01Config {
    * `heroHold` is blended in during Phase E (a subtle push-in, never a cut).
    */
   camera: FramedCameraSpec
-  lighting: {
-    hemisphere: { skyColor: string; groundColor: string; intensity: number }
-    key: {
-      position: Vec3
-      color: string
-      intensity: number
-      castShadow: boolean
-      shadowMapSize: number
-      /** Half-extent (m) of the orthographic shadow frustum around the assembly area. */
-      shadowExtent: number
-      shadowBias: number
-      shadowNormalBias: number
-    }
-    fill: { position: Vec3; color: string; intensity: number }
-    rim: { position: Vec3; color: string; intensity: number }
-    /** Strength of the procedural image-based environment (RoomEnvironment). */
-    environmentIntensity: number
-    toneMappingExposure: number
-  }
-  environment: {
-    backgroundColor: string
-    fog: { color: string; near: number; far: number }
-    floor: { size: number; color: string; roughness: number; metalness: number }
-    /** Subtle painted yard markings on the floor — restrained environmental detail. */
-    markings: { color: string; opacity: number; laneHalfWidth: number; length: number; stripeLength: number; stripeGap: number }
-    contactShadow: { opacity: number; blur: number; width: number; height: number; far: number }
-  }
+  /** Stage lighting. Light positions are ABSOLUTE world positions in metres, not relative to the vehicles. */
+  lighting: StageLightingConfig
+  /** Background/fog colour, yard floor, markings and contact shadow. */
+  environment: YardEnvironmentConfig
   scroll: {
     /** Pinned scroll distance as a multiple of the viewport height (3.2 = 320vh). */
     distanceVh: number
@@ -120,15 +99,7 @@ export interface Scene01Config {
     /** Fraction of the heroHold phase over which the closing caption fades in. */
     captionFadeInPortion: number
   }
-  rendering: {
-    /** Device-pixel-ratio clamp [min, max] on pointer: fine devices (desktop). */
-    dprDesktop: readonly [number, number]
-    /** Device-pixel-ratio clamp on coarse-pointer devices (phones / tablets). */
-    dprMobile: readonly [number, number]
-    shadows: boolean
-    antialias: boolean
-    powerPreference: 'high-performance' | 'low-power' | 'default'
-  }
+  rendering: RenderingConfig
   reducedMotion: {
     /** When the user prefers reduced motion: skip scrubbing and show the completed combination statically. */
     showFinalState: boolean
@@ -183,7 +154,7 @@ export const SCENE_01_CONFIG: Scene01Config = {
   },
 
   lighting: {
-    hemisphere: { skyColor: '#c9d3df', groundColor: '#2b2e33', intensity: 0.5 },
+    hemisphere: { skyColor: '#c9d3df', groundColor: '#2b2e33', intensity: 0.75 },
     key: {
       position: [14, 22, 12],
       color: '#fff3e2',
@@ -191,20 +162,21 @@ export const SCENE_01_CONFIG: Scene01Config = {
       castShadow: true,
       shadowMapSize: 2048,
       shadowExtent: 26,
-      shadowBias: -0.0004,
-      shadowNormalBias: 0.02,
+      shadowBias: -0.0002,
+      shadowNormalBias: 0.05,
+      shadowRadius: 3,
     },
-    fill: { position: [-18, 9, 6], color: '#b7c5d6', intensity: 0.55 },
+    fill: { position: [-18, 9, 6], color: '#b7c5d6', intensity: 0.7 },
     rim: { position: [-6, 12, -20], color: '#e6ecf2', intensity: 0.8 },
-    environmentIntensity: 0.55,
+    environmentIntensity: 0.7,
     toneMappingExposure: 1.0,
   },
 
   environment: {
     backgroundColor: '#0e1013',
-    fog: { color: '#0e1013', near: 48, far: 130 },
-    floor: { size: 320, color: '#1a1d21', roughness: 0.94, metalness: 0.04 },
-    markings: { color: '#3b4048', opacity: 0.55, laneHalfWidth: 2.4, length: 90, stripeLength: 2.4, stripeGap: 1.6 },
+    fog: { near: 48, far: 130 },
+    floor: { size: 320, color: '#17191d', roughness: 0.94, metalness: 0.04, envMapIntensity: 0.35 },
+    markings: { color: '#454b53', opacity: 0.6, laneHalfWidth: 2.4, length: 90, stripeLength: 2.4, stripeGap: 1.6 },
     contactShadow: { opacity: 0.55, blur: 2.2, width: 80, height: 14, far: 3 },
   },
 

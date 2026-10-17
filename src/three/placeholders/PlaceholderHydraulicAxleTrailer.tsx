@@ -33,6 +33,8 @@ const TYRE_RADIUS = 0.5
 const TYRE_WIDTH = 0.3
 /** Clearance between the two tyres of a twin wheel. */
 const TWIN_GAP = 0.06
+/** Outer tyre faces sit this far inside the side rails: a coplanar face would z-fight with the rail. */
+const TYRE_INSET = 0.08
 const AXLE_LINES = 8
 const DECK_TOP = 1.2
 const DECK_THICKNESS = 0.5
@@ -116,7 +118,7 @@ function deriveTrailerDimensions(entry: ModelManifestEntry): TrailerDimensions {
   const lastAxle = rear - 1.1
   const pitch = (lastAxle - firstAxle) / (AXLE_LINES - 1)
   const axleXs = Array.from({ length: AXLE_LINES }, (_, i) => firstAxle + i * pitch)
-  const outerZ = halfWidth - TYRE_WIDTH / 2
+  const outerZ = halfWidth - TYRE_WIDTH / 2 - TYRE_INSET
   const innerZ = outerZ - TYRE_WIDTH - TWIN_GAP
   const tyres: Vec3[] = []
   for (const x of axleXs) {
