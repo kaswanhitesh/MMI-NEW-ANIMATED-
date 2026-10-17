@@ -89,8 +89,8 @@ export interface Scene01Config {
     /** Shared ease for both vehicles' travel — identical so they move and arrive together. */
     approach: string
     heroDolly: string
-    /** Ease of the warehouse fade-in during the second part of the approach. */
-    warehouseFade: string
+    /** Ease of the garage fade-in during the second part of the approach. */
+    garageFade: string
     overlay: string
   }
   overlay: {
@@ -176,34 +176,55 @@ export const SCENE_01_CONFIG: Scene01Config = {
     floor: { size: 320, color: '#17191d', roughness: 0.94, metalness: 0.04, envMapIntensity: 0.35 },
     markings: { color: '#454b53', opacity: 0.6, laneHalfWidth: 2.4, length: 90, stripeLength: 2.4, stripeGap: 1.6 },
     contactShadow: { opacity: 0.55, blur: 2.2, width: 80, height: 14, far: 3 },
-    // Cinematic backdrop: invisible while the vehicles enter, fades in from 40% of the approach and is fully
-    // visible the moment they couple. The facade stands 28 m behind the coupling line and spans the frame.
-    warehouse: {
+    // Cinematic backdrop: the MMI fleet garage. Invisible while the vehicles enter, fades in from 40% of the
+    // approach and is fully visible the moment they couple. The facade stands 26 m behind the coupling line.
+    garage: {
       enabled: true,
       fadeStartPortion: 0.4,
-      position: [0, 0, -28],
-      width: 170,
-      height: 10.5,
-      depth: 34,
-      dock: { height: 1.25, depth: 2.6 },
-      bays: { count: 9, pitch: 7.2, doorWidth: 3.4, doorHeight: 4.2 },
-      canopy: { height: 6.9, depth: 3.6, thickness: 0.3 },
-      panelSeamPitch: 2.5,
+      position: [0, 0, -26],
+      width: 150,
+      depth: 40,
+      eavesHeight: 14.5,
+      bays: { count: 7, pitch: 12.5, openingHeight: 12.3, openBays: [1, 2, 3, 4, 5] },
+      columns: { size: 0.7, interiorRows: [13, 26] },
+      trusses: { spacing: 6.25, topChordHeight: 13.8, bottomChordHeight: 11.6, diagonalPitch: 3.2, purlinPitch: 5 },
+      luminaires: { height: 10.9, rowSpacing: 8, spacing: 6.25, length: 3.2 },
+      ribPitch: 1.0,
+      zones: [
+        { kind: 'inspection', position: [-12.5, 0, 15], size: [9, 16] },
+        { kind: 'inspection', position: [12.5, 0, 15], size: [9, 16] },
+        { kind: 'pit', position: [0, 0, 19], size: [1.3, 14] },
+      ],
+      fleet: [
+        // Yaw 0 = parallel to the facade (nose to −X); +π/2 = nose towards the camera.
+        { kind: 'puller', x: 0, depth: 9.5, rotationY: Math.PI / 2 },
+        { kind: 'trailer', x: -20, depth: 21, rotationY: 0 },
+        { kind: 'puller', x: 14, depth: 25, rotationY: Math.PI },
+        { kind: 'lowbed', x: 24, depth: 13, rotationY: 0 },
+      ],
       colors: {
-        wall: '#3f444a',
-        fascia: '#2b2f34',
-        plinth: '#34383e',
-        pilaster: '#383d43',
-        door: '#4c5158',
-        frame: '#1f2226',
-        seam: '#282c31',
-        bumper: '#111213',
-        canopy: '#30343a',
-        roof: '#24272b',
-        clerestory: '#5a636c',
-        lightStrip: '#ffe3b8',
+        bollard: '#d9a521',
+        frontColumn: '#2b2f35',
+        doorHead: '#4a4f56',
+        closedDoor: '#50555c',
+        bayLight: '#ffe3b8',
+        cladding: '#3a3f45',
+        rib: '#30343a',
+        fascia: '#24282d',
+        fleetPaint: '#2f3338',
+        fleetSteel: '#8d949c',
+        interiorColumn: '#353a40',
+        sleeve: '#d9a521',
+        truss: '#9aa2ab',
+        luminaire: '#dfe8f0',
+        accentLine: '#d9a521',
+        zone: '#4b4f55',
+        pit: '#1b1e22',
+        slab: '#575b60',
+        girt: '#3f444a',
+        backWall: '#2e3237',
       },
-      lightStripIntensity: 1.0,
+      lightIntensity: { bay: 1.0, luminaire: 1.8 },
     },
   },
 
@@ -226,7 +247,7 @@ export const SCENE_01_CONFIG: Scene01Config = {
   easing: {
     approach: 'power2.inOut',
     heroDolly: 'power1.inOut',
-    warehouseFade: 'power1.inOut',
+    garageFade: 'power1.inOut',
     overlay: 'power1.out',
   },
 

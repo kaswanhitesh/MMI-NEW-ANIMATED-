@@ -137,12 +137,12 @@ function populateTimeline(tl: gsap.core.Timeline, rig: CouplingRig, layout: Asse
   // The hero copy fades out early in the approach.
   tl.to(rig.overlay, { heroOpacity: 0, duration: len(A) * overlay.heroFadeOutPortion, ease: easing.overlay }, A.start)
 
-  // Warehouse backdrop: starts fading in part-way through the approach and is fully visible exactly when the
+  // Fleet-garage backdrop: starts fading in part-way through the approach and is fully visible exactly when the
   // vehicles arrive, on the same scrubbed timeline, so scrolling back up fades it out with their retreat.
-  const warehouse = config.environment.warehouse
-  if (warehouse.enabled) {
-    const fadeStart = A.start + len(A) * warehouse.fadeStartPortion
-    tl.to(rig.warehouse, { opacity: 1, duration: Math.max(1e-4, A.end - fadeStart), ease: easing.warehouseFade }, fadeStart)
+  const garage = config.environment.garage
+  if (garage.enabled) {
+    const fadeStart = A.start + len(A) * garage.fadeStartPortion
+    tl.to(rig.garage, { opacity: 1, duration: Math.max(1e-4, A.end - fadeStart), ease: easing.garageFade }, fadeStart)
   }
 
   // Hero hold: both vehicles stay put; a subtle camera push-in, then the closing caption fades in.

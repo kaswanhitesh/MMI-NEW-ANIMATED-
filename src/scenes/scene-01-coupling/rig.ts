@@ -30,8 +30,8 @@ export interface CouplingRig {
     /** Opacity of the closing caption (DOM). */
     captionOpacity: number
   }
-  warehouse: {
-    /** Opacity of the warehouse backdrop: 0 while the vehicles enter, 1 once they are coupled. */
+  garage: {
+    /** Opacity of the fleet-garage backdrop: 0 while the vehicles enter, 1 once they are coupled. */
     opacity: number
   }
   /** Overall timeline progress 0–1, mirrored for diagnostics / badges. */
@@ -49,7 +49,7 @@ export function createInitialRig(layout: AssemblyLayout): CouplingRig {
     trailer: pos(layout.trailerStart),
     camera: { heroBlend: 0 },
     overlay: { heroOpacity: 1, captionOpacity: 0 },
-    warehouse: { opacity: 0 },
+    garage: { opacity: 0 },
     progress: 0,
   }
 }
@@ -61,7 +61,7 @@ export function createFinalRig(layout: AssemblyLayout): CouplingRig {
     trailer: pos(layout.trailerFinal),
     camera: { heroBlend: 1 },
     overlay: { heroOpacity: 0, captionOpacity: 1 },
-    warehouse: { opacity: 1 },
+    garage: { opacity: 1 },
     progress: 1,
   }
 }
@@ -73,6 +73,6 @@ export function assignRig(into: CouplingRig, from: CouplingRig): void {
   into.camera.heroBlend = from.camera.heroBlend
   into.overlay.heroOpacity = from.overlay.heroOpacity
   into.overlay.captionOpacity = from.overlay.captionOpacity
-  into.warehouse.opacity = from.warehouse.opacity
+  into.garage.opacity = from.garage.opacity
   into.progress = from.progress
 }

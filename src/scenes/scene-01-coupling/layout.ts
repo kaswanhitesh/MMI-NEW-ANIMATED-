@@ -102,9 +102,9 @@ export function validateScene01Config(config: Scene01Config = SCENE_01_CONFIG, m
   }
   if (Math.abs(cursor - 1) > 1e-9) warnings.push(`Phases must end at 1 (last phase ends at ${cursor}).`)
 
-  // 4. The warehouse fade must start inside the approach phase.
-  const fadePortion = config.environment.warehouse.fadeStartPortion
-  if (!(fadePortion >= 0 && fadePortion < 1)) warnings.push(`environment.warehouse.fadeStartPortion must be in [0, 1) (got ${fadePortion}).`)
+  // 4. The garage fade must start inside the approach phase.
+  const fadePortion = config.environment.garage.fadeStartPortion
+  if (!(fadePortion >= 0 && fadePortion < 1)) warnings.push(`environment.garage.fadeStartPortion must be in [0, 1) (got ${fadePortion}).`)
 
   // 5. Entrances must actually travel in the documented directions.
   if (layout.pullerStart[0] >= layout.pullerFinal[0]) warnings.push('pullerStart must be at −X of the puller final position (it enters from the left).')

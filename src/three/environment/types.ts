@@ -45,45 +45,72 @@ export interface YardEnvironmentConfig {
   /** Subtle painted yard markings on the floor — restrained environmental detail. */
   markings: { color: string; opacity: number; laneHalfWidth: number; length: number; stripeLength: number; stripeGap: number }
   contactShadow: { opacity: number; blur: number; width: number; height: number; far: number }
-  /** Procedural industrial warehouse behind the yard; its opacity is driven by the scene's animation rig. */
-  warehouse: WarehouseConfig
+  /** Procedural heavy-haul fleet garage behind the yard; its opacity is driven by the scene's animation rig. */
+  garage: FleetGarageConfig
+}
+
+/** One stationary unit parked inside the garage. `x` is relative to the facade centre, `depth` is metres into the hall. */
+export interface GarageFleetUnit {
+  kind: 'puller' | 'trailer' | 'lowbed'
+  x: number
+  depth: number
+  /** Yaw in radians. 0 = parallel to the facade (nose to −X); +π/2 = nose towards the camera. */
+  rotationY: number
+}
+
+/** A floor zone inside the hall: `position` = [x from facade centre, 0, depth into the hall], `size` = [width, length]. */
+export interface GarageZone {
+  kind: 'inspection' | 'pit'
+  position: Vec3
+  size: readonly [number, number]
 }
 
 /**
- * A large, restrained logistics warehouse facade built from boxes (precast
- * wall with panel seams and pilasters, raised loading dock with dock doors,
- * bumpers and strip lights, canopy, clerestory band, fascia, roof slab).
- * All dimensions in metres. The facade's front plane is at `position[2]` and
- * the building extends towards −Z; `position[1]` is ignored (it stands on the
- * scene's ground plane).
+ * A long steel-framed heavy-haul assembly hall built from boxes: open service
+ * bays with rolled-door housings between structural columns, closed sectional
+ * doors in the end bays, corrugated cladding above, concrete slab, interior
+ * column rows, roof trusses, ceiling luminaires, inspection zones and a parked
+ * fleet. All dimensions in metres. The facade's front plane is at
+ * `position[2]`; the hall extends towards −Z; `position[1]` is ignored (it
+ * stands on the scene's ground plane).
  */
-export interface WarehouseConfig {
+export interface FleetGarageConfig {
   enabled: boolean
   /** Fraction (0–1) of the vehicles' approach phase at which the fade-in starts; it completes when they arrive. */
   fadeStartPortion: number
   position: Vec3
   width: number
-  height: number
   depth: number
-  dock: { height: number; depth: number }
-  bays: { count: number; pitch: number; doorWidth: number; doorHeight: number }
-  canopy: { height: number; depth: number; thickness: number }
-  /** Spacing of the vertical precast panel seams along the wall. */
-  panelSeamPitch: number
+  eavesHeight: number
+  bays: { count: number; pitch: number; openingHeight: number; openBays: readonly number[] }
+  columns: { size: number; interiorRows: readonly number[] }
+  trusses: { spacing: number; topChordHeight: number; bottomChordHeight: number; diagonalPitch: number; purlinPitch: number }
+  luminaires: { height: number; rowSpacing: number; spacing: number; length: number }
+  /** Spacing of the vertical corrugation ribs on the facade cladding. */
+  ribPitch: number
+  zones: readonly GarageZone[]
+  fleet: readonly GarageFleetUnit[]
   colors: {
-    wall: string
+    bollard: string
+    frontColumn: string
+    doorHead: string
+    closedDoor: string
+    bayLight: string
+    cladding: string
+    rib: string
     fascia: string
-    plinth: string
-    pilaster: string
-    door: string
-    frame: string
-    seam: string
-    bumper: string
-    canopy: string
-    roof: string
-    clerestory: string
-    lightStrip: string
+    fleetPaint: string
+    fleetSteel: string
+    interiorColumn: string
+    sleeve: string
+    truss: string
+    luminaire: string
+    accentLine: string
+    zone: string
+    pit: string
+    slab: string
+    girt: string
+    backWall: string
   }
-  /** Emissive strength of the strip lights above the dock doors (0 = off). */
-  lightStripIntensity: number
+  lightIntensity: { bay: number; luminaire: number }
 }

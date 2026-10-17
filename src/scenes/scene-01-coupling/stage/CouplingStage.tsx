@@ -8,12 +8,13 @@
  */
 import { useThree } from '@react-three/fiber'
 import { useEffect, useMemo } from 'react'
+import { getModelEntry } from '../../../three/assets'
 import type { Vec3 } from '../../../three/assets/types'
 import type { FramedCameraSpec } from '../../../three/camera/types'
 import { useFramedCamera } from '../../../three/camera/useFramedCamera'
 import { ProceduralEnvironment } from '../../../three/environment/ProceduralEnvironment'
 import { StageLighting } from '../../../three/environment/StageLighting'
-import { Warehouse } from '../../../three/environment/Warehouse'
+import { FleetGarage } from '../../../three/environment/FleetGarage'
 import { YardFloor } from '../../../three/environment/YardFloor'
 import { SCENE_01_CONFIG, type Scene01Config } from '../config'
 import type { AssemblyLayout } from '../layout'
@@ -66,8 +67,13 @@ export function CouplingStage({ rig, layout, config = SCENE_01_CONFIG }: Couplin
       <ProceduralEnvironment intensity={config.lighting.environmentIntensity} />
       <StageLighting lighting={config.lighting} shadowCentre={shadowCentre} />
       <YardFloor environment={config.environment} groundY={config.world.groundY} shadowCentre={shadowCentre} />
-      {config.environment.warehouse.enabled && (
-        <Warehouse config={config.environment.warehouse} groundY={config.world.groundY} getOpacity={() => rig.warehouse.opacity} />
+      {config.environment.garage.enabled && (
+        <FleetGarage
+          config={config.environment.garage}
+          groundY={config.world.groundY}
+          fleet={{ puller: getModelEntry(config.models.puller), trailer: getModelEntry(config.models.trailer), sceneScale: config.models.scale }}
+          getOpacity={() => rig.garage.opacity}
+        />
       )}
       <CameraRig spec={config.camera} rig={rig} />
       <PullerTruck rig={rig} layout={layout} config={config} />
