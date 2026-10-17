@@ -60,9 +60,7 @@ function walkBand(rand: () => number, span: readonly [number, number], band: Cit
   let x = span[0]
   while (x < span[1]) {
     const w = range(rand, band.width)
-    // A building that would overrun the span is left out (same draws, so the rest of the layout is unchanged): a band
-    // that stops where the industrial area begins must not reach into it.
-    if (x + w <= span[1]) place(x + w / 2, w)
+    place(x + w / 2, w)
     x += w + range(rand, band.gap)
   }
 }

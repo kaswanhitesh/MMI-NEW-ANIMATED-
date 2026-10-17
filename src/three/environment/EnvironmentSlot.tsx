@@ -15,7 +15,7 @@
  *
  * A loaded model is never mutated: the slot works on a copy (optionally merged
  * to one mesh per material, `mergeByMaterial`) and can repeat it (`instances`,
- * e.g. a city block tiled along the road), the copies sharing geometry.
+ * e.g. one building module placed several times), the copies sharing geometry.
  */
 import { useFrame, useLoader, useThree } from '@react-three/fiber'
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react'

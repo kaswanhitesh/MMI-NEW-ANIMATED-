@@ -48,9 +48,9 @@ export interface EnvironmentModelConfig {
   castShadow: boolean
   receiveShadow: boolean
   /**
-   * Repeats the model: one copy per entry, placed in slot-local metres with a yaw about Y (e.g. a city block tiled
-   * along the road). `position` / `rotation` / `scale` above apply inside every copy. Omitted = one copy at the slot
-   * origin. Copies share geometry and materials.
+   * Repeats the model: one copy per entry, placed in slot-local metres with a yaw about Y (e.g. one building module
+   * placed several times). `position` / `rotation` / `scale` above apply inside every copy. Omitted = one copy at the
+   * slot origin. Copies share geometry and materials.
    */
   instances?: ReadonlyArray<{ position: Vec3; rotationY: number }>
   /**

@@ -45,7 +45,7 @@ Everything in the 3D scenes is expressed in **metres** in a right-handed, **Y-up
 | Garage      | `(0, 0, −26)`            | Facade front plane at z −26; hall to z −66; building x −50 … 35; forecourt apron to z 16 (kerb), x −90 … 90 |
 | Exit road   | `(0, 0, 0)`              | Under the U-turn from the apron kerb (z 16) to the far carriageway edge (z 26.2), x ≈ −35 … −16 |
 | Highway     | `(0, 0, 29.9)`           | Centre line at z 29.9 along X; carriageway z 26.15 … 33.65; verges to z 21.65 and 38.15 |
-| City        | `(0, 0, −95)`            | Industry z −95 … −135, mid-rise z −170 … −290 (x −1200 … 330), skyline z −460 … −936 (x −1200 … 2400) |
+| City        | `(0, 0, −95)`            | Industry z −95 … −165, mid-rise z −170 … −290 (x −1200 … 330), skyline z −460 … −936 (x −1200 … 2400) |
 | Industrial area | `(0, 0, 21.65)`      | Along the highway's far verge, x 300 … 1100 except 380 … 540 (the factory compound); compounds run to −Z |
 | Factory     | `(430, 0, 6)`            | Front (door) wall at z 6, hall to z −114; bay B x 394 … 430, bay A x 430 … 472; bay A door x 436 … 466 (18 m high); yard to the boundary wall at z 19.5, gate x 440 … 478; driveway x 440 … 496 to the carriageway |
 | Crane       | `(451, 0, 0)`            | Bay A's centre line; runway along Z inside the hall, span 40.3 m, rails at 17 m |

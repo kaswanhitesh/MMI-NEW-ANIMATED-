@@ -232,8 +232,8 @@ Engine-layer pieces (`SceneCanvas`, `useFramedCamera`, `StageLighting`, `YardFlo
   `follow: 1`, so the camera translates with the combination and it stays anchored bottom-left. The
   city stand-in (`CityBackdrop.tsx`) is deliberately simple: seeded rows of industrial sheds, mid-rise
   blocks and skyline towers behind the garage, one instanced mesh per material with per-instance tone
-  variation. The sheds and mid-rise blocks stop where the industrial area begins (x 330); the skyline
-  covers the widest view (32:9) over the departure and the whole journey, so no edge comes into view. The sky (`DaylightSky.tsx`) is a camera-following gradient dome.
+  variation. Its span covers the widest view (32:9) over the departure and the whole travel, so no
+  edge comes into view. The sky (`DaylightSky.tsx`) is a camera-following gradient dome.
 - **Road, highway and ground layers** — `AccessRoad.tsx` paves the exit road: the U-turn's band,
   10.5 m wide around the path, clipped at the apron kerb and at the far carriageway edge
   (`describeExitRoad`). `Highway.tsx` lays a two-way road with a generated grain texture (mipmapped,

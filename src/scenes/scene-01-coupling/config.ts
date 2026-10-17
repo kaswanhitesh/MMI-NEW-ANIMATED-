@@ -870,12 +870,7 @@ export const SCENE_01_CONFIG: Scene01Config = {
     // hides it until the daylight haze takes over.
     city: {
       enabled: true,
-      slot: {
-        position: [0, 0, -95],
-        rotationY: 0,
-        bounds: { min: [-1200, 0, -845], max: [2400, 170, 0] },
-        model: null,
-      },
+      slot: { position: [0, 0, -95], rotationY: 0, bounds: { min: [-1200, 0, -845], max: [2400, 170, 0] }, model: null },
       seed: 20251,
       span: [-1200, 2400],
       skyline: { zRange: [-365, -805], width: [18, 44], depth: [18, 36], height: [30, 78], gap: [1, 9], landmarkChance: 0.12, landmarkHeight: [90, 128] },
