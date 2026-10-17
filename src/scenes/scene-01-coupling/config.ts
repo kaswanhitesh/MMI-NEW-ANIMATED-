@@ -83,7 +83,7 @@ export interface Scene01Config {
     trailerTrackingLength: number
     /** Fraction of the departure phase over which the garage fades out and the highway fades in. */
     crossfadePortion: number
-    /** Fraction of the departure phase at which the camera starts settling from `wide` to `highway`. */
+    /** Fraction of the departure phase at which the camera starts settling from `wide` to `highway` (≈ the turn exit). */
     cameraSettleStart: number
   }
   /** Stage lighting. Light positions are ABSOLUTE world positions in metres, not relative to the vehicles. */
@@ -169,22 +169,25 @@ export const SCENE_01_CONFIG: Scene01Config = {
       base: { direction: [0.34, 0.27, 1], fitWidth: 40, fitHeight: 11, targetOffset: [0, 0, 0] },
       // Coupling hold: a subtle push-in, never a cut.
       heroHold: { direction: [0.3, 0.22, 1], fitWidth: 34, fitHeight: 10, targetOffset: [0, 0.2, 0] },
-      // Establishing shot: pulls out and re-centres over the turning area, leaving room on the left where the
-      // combination will swing round, so the whole U-turn stays in frame without moving the camera.
+      // Establishing shot: pulls out and re-centres over the turning area. During the departure it TRACKS the
+      // combination (follow 0.8: the camera moves with 80% of its displacement, so the vehicle still visibly
+      // travels across the frame) and the whole U-turn stays in frame on every aspect ratio.
       wide: {
         direction: [0.34, 0.27, 1],
         fitWidth: 62,
         fitHeight: 22,
         targetOffset: [-8, -0.2, 11],
-        portrait: { fitWidth: 46, maxDistance: 210, targetOffset: [-8.5, -0.2, 13] },
+        follow: 0.8,
+        portrait: { fitWidth: 46, maxDistance: 210, targetOffset: [-6, -0.2, 13], follow: 1 },
       },
-      // Final: the combination parked on the highway on the RIGHT, the left ~40% of the frame kept clear.
-      // On portrait screens the combination is centred instead (it already fills most of the width there).
+      // Final: the combination parked on the highway on the RIGHT, the left ~38% of the frame kept clear for
+      // future content. Static (no follow) so the end composition is exactly this. On portrait screens the
+      // combination is centred instead (it already fills most of the width there).
       highway: {
         direction: [0.3, 0.2, 1],
-        fitWidth: 56,
+        fitWidth: 50,
         fitHeight: 16,
-        targetOffset: [5, -0.2, 29.9],
+        targetOffset: [6.5, -0.2, 29.9],
         portrait: { fitWidth: 32, maxDistance: 210, targetOffset: [13, -0.2, 29.9] },
       },
     },
@@ -199,7 +202,7 @@ export const SCENE_01_CONFIG: Scene01Config = {
     straightIn: 38,
     trailerTrackingLength: 10.55,
     crossfadePortion: 0.35,
-    cameraSettleStart: 0.68,
+    cameraSettleStart: 0.5,
   },
 
   lighting: {
@@ -291,9 +294,10 @@ export const SCENE_01_CONFIG: Scene01Config = {
       colors: { asphalt: '#2a2c2f', shoulder: '#3a3b3c', verge: '#33363a', centreLine: '#cfd2d4', edgeLine: '#c9ccce' },
       grain: 0.6,
       // Paved yard exit under the departure path: 10.5 m wide (covers the trailer's swept path including its tail
-      // swing, ~0.45 m beyond the path's outer offset at the end of the turn), starting 2 m behind
-      // the trailer's rear and tucking 5 cm under the carriageway at the junction.
-      access: { width: 10.5, rearMargin: 2, overlap: 0.05 },
+      // swing, ~0.45 m beyond the path's outer offset at the end of the turn). Its straight runs along the former
+      // garage frontage into the fog (to the road's end, at least 2 m behind the trailer) and it tucks 5 cm under
+      // the carriageway at the junction.
+      access: { width: 10.5, rearMargin: 2, runToRoadEnd: true, overlap: 0.05 },
     },
   },
 

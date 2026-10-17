@@ -64,21 +64,37 @@ function lerp3(a: Vec3, b: Vec3, t: number): Vec3 {
   return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
 }
 
-/** Interpolated pose for a stage value along the spec's framing sequence (clamped to the sequence). Pure. */
-export function resolveStagePose(spec: FramedCameraSpec, stage: number, aspect: number): FramedCameraPose {
+/** Ground-plane displacement (x, z) of the followed subject from its rest position. */
+export type FollowDelta = readonly [dx: number, dz: number]
+
+const NO_FOLLOW: FollowDelta = [0, 0]
+
+/**
+ * Interpolated pose for a stage value along the spec's framing sequence (clamped to the sequence), with the
+ * framings' `follow` weights applied to the subject's displacement. Pure.
+ */
+export function resolveStagePose(spec: FramedCameraSpec, stage: number, aspect: number, follow: FollowDelta = NO_FOLLOW): FramedCameraPose {
   const poses = spec.sequence.map((name) => computeFramedCameraPose(spec, spec.framings[name], aspect))
-  return blendPoses(poses, stage)
+  const weights = spec.sequence.map((name) => resolveFraming(spec.framings[name], aspect).follow ?? 0)
+  return blendPoses(poses, weights, stage, follow)
 }
 
-function blendPoses(poses: readonly FramedCameraPose[], stage: number): FramedCameraPose {
+function blendPoses(poses: readonly FramedCameraPose[], weights: readonly number[], stage: number, follow: FollowDelta): FramedCameraPose {
   const last = poses.length - 1
   const s = clamp(Number.isFinite(stage) ? stage : 0, 0, last)
   const i = Math.min(Math.floor(s), last - 1 < 0 ? 0 : last - 1)
   const t = s - i
   const a = poses[i]
   const b = poses[Math.min(i + 1, last)]
-  if (t <= 0 || a === b) return a
-  return { position: lerp3(a.position, b.position, t), target: lerp3(a.target, b.target, t) }
+  const w = (weights[i] ?? 0) + ((weights[Math.min(i + 1, last)] ?? 0) - (weights[i] ?? 0)) * t
+  const base = t <= 0 || a === b ? a : { position: lerp3(a.position, b.position, t), target: lerp3(a.target, b.target, t) }
+  if (w === 0 || (follow[0] === 0 && follow[1] === 0)) return base
+  const dx = w * follow[0]
+  const dz = w * follow[1]
+  return {
+    position: [base.position[0] + dx, base.position[1], base.position[2] + dz],
+    target: [base.target[0] + dx, base.target[1], base.target[2] + dz],
+  }
 }
 
 function isPerspective(camera: Camera): camera is PerspectiveCamera {
@@ -90,7 +106,10 @@ interface FramedCameraCache {
   spec: FramedCameraSpec | null
   aspect: number
   stage: number
+  followX: number
+  followZ: number
   poses: FramedCameraPose[] | null
+  weights: number[] | null
 }
 
 const _lookAt = new Vector3()
@@ -98,18 +117,21 @@ const _lookAt = new Vector3()
 /**
  * Drives the default camera from `spec`, walking its framing sequence by the
  * value `getStage()` returns (clamped to 0 … sequence.length − 1). `getStage`
- * is read every frame, so it may close over a mutable animation rig.
+ * and `getFollow` are read every frame, so they may close over a mutable
+ * animation rig. `getFollow` returns the followed subject's ground-plane
+ * displacement from rest; framings with a `follow` weight track it.
  * Projection parameters (fov / near / far) are written only when they differ
  * from the spec.
  */
-export function useFramedCamera(spec: FramedCameraSpec, getStage: () => number): void {
-  const cache = useRef<FramedCameraCache>({ camera: null, spec: null, aspect: NaN, stage: NaN, poses: null })
+export function useFramedCamera(spec: FramedCameraSpec, getStage: () => number, getFollow?: () => FollowDelta): void {
+  const cache = useRef<FramedCameraCache>({ camera: null, spec: null, aspect: NaN, stage: NaN, followX: NaN, followZ: NaN, poses: null, weights: null })
 
   useFrame((state) => {
     const camera = state.camera
     const { width, height } = state.size
     const aspect = height > 0 ? width / height : 1
     const stage = getStage()
+    const follow = getFollow ? getFollow() : NO_FOLLOW
     const c = cache.current
 
     if (isPerspective(camera) && (camera.fov !== spec.fov || camera.near !== spec.near || camera.far !== spec.far)) {
@@ -124,12 +146,15 @@ export function useFramedCamera(spec: FramedCameraSpec, getStage: () => number):
       c.spec = spec
       c.aspect = aspect
       c.poses = spec.sequence.map((name) => computeFramedCameraPose(spec, spec.framings[name], aspect))
+      c.weights = spec.sequence.map((name) => resolveFraming(spec.framings[name], aspect).follow ?? 0)
       c.stage = NaN
     }
-    if (c.stage === stage || !c.poses || c.poses.length === 0) return
+    if ((c.stage === stage && c.followX === follow[0] && c.followZ === follow[1]) || !c.poses || !c.weights || c.poses.length === 0) return
     c.stage = stage
+    c.followX = follow[0]
+    c.followZ = follow[1]
 
-    const pose = blendPoses(c.poses, stage)
+    const pose = blendPoses(c.poses, c.weights, stage, follow)
     camera.position.set(pose.position[0], pose.position[1], pose.position[2])
     _lookAt.set(pose.target[0], pose.target[1], pose.target[2])
     camera.lookAt(_lookAt)

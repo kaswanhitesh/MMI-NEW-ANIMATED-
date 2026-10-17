@@ -127,6 +127,28 @@ export function resolveCouplingPose(rig: CouplingRig, path: DeparturePath, track
   trailer.yaw = psi
 }
 
+/** Lengths (m) used to locate the combination's ends for camera following. */
+export interface CombinationLengths {
+  pullerLength: number
+  trailerLength: number
+}
+
+/**
+ * Ground-plane centre of the combination (midpoint of the puller's nose and the trailer's tail), written into
+ * `out`. The camera follows its displacement from the coupled rest position.
+ */
+export function combinationCentre(pose: CouplingPose, lengths: CombinationLengths, out: [number, number]): [number, number] {
+  const { puller: p, trailer: t } = pose
+  // Forward (local −X) of a vehicle with yaw θ is (−cos θ, sin θ); its nose is half a length along it, its tail half a length back.
+  const noseX = p.x - (lengths.pullerLength / 2) * Math.cos(p.yaw)
+  const noseZ = p.z + (lengths.pullerLength / 2) * Math.sin(p.yaw)
+  const tailX = t.x + (lengths.trailerLength / 2) * Math.cos(t.yaw)
+  const tailZ = t.z - (lengths.trailerLength / 2) * Math.sin(t.yaw)
+  out[0] = (noseX + tailX) / 2
+  out[1] = (noseZ + tailZ) / 2
+  return out
+}
+
 /** Articulation angle (radians) between puller and trailer headings — handy for tests and tuning. */
 export function articulationAngle(pose: CouplingPose): number {
   let d = pose.puller.yaw - pose.trailer.yaw

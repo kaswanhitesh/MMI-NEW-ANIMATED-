@@ -73,7 +73,15 @@ export interface HighwayConfig {
   /** Strength of the procedural asphalt grain, 0 (flat colour) to 1. */
   grain: number
   /** Paved access road the scene lays under its departure path (the scene derives the outline). */
-  access: { width: number; rearMargin: number; overlap: number }
+  access: {
+    width: number
+    /** Minimum distance (m) the straight extends behind the trailer's rear. */
+    rearMargin: number
+    /** Run the straight on to the end of the highway (into the fog) instead of stopping behind the trailer. */
+    runToRoadEnd: boolean
+    /** Metres the access road tucks under the carriageway at the junction (hides the joint). */
+    overlap: number
+  }
 }
 
 /** One stationary unit parked inside the garage. `x` is relative to the facade centre, `depth` is metres into the hall. */

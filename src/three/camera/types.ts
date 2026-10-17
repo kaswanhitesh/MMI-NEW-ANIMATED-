@@ -18,10 +18,16 @@ export interface CameraFraming {
   /** Overrides the spec-wide `maxDistance` for this framing (e.g. a wide shot that may pull back further). */
   maxDistance?: number
   /**
+   * 0–1: how much this framing tracks a moving subject. The camera and its target are translated by
+   * `follow × (subject − subjectAtRest)` in the ground plane, so at rest the framing is exactly as configured
+   * and a moving subject stays in frame. Weights blend between neighbouring framings like everything else.
+   */
+  follow?: number
+  /**
    * Overrides applied on portrait viewports (aspect < 1). Use it to centre a composition that is right-aligned
    * on landscape screens, or to tighten / loosen the fit where the narrow width would otherwise dominate.
    */
-  portrait?: Partial<Pick<CameraFraming, 'targetOffset' | 'fitWidth' | 'fitHeight' | 'maxDistance'>>
+  portrait?: Partial<Pick<CameraFraming, 'targetOffset' | 'fitWidth' | 'fitHeight' | 'maxDistance' | 'follow'>>
 }
 
 export interface FramedCameraSpec<N extends string = string> {

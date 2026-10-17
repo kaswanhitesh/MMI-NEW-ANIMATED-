@@ -21,9 +21,9 @@ import { ProceduralEnvironment } from '../../../three/environment/ProceduralEnvi
 import { StageLighting } from '../../../three/environment/StageLighting'
 import { YardFloor } from '../../../three/environment/YardFloor'
 import { SCENE_01_CONFIG, type Scene01Config } from '../config'
-import { createDeparturePath, describeAccessRoad, resolveCouplingPose, type TrailerTracking } from '../departurePath'
+import { combinationCentre, createDeparturePath, describeAccessRoad, resolveCouplingPose, type CombinationLengths, type TrailerTracking } from '../departurePath'
 import type { AssemblyLayout } from '../layout'
-import type { CouplingPose, CouplingRig } from '../rig'
+import { createPose, type CouplingPose, type CouplingRig } from '../rig'
 import { HydraulicAxleTrailer } from '../vehicles/HydraulicAxleTrailer'
 import { PullerTruck } from '../vehicles/PullerTruck'
 import { blendFogDepths, resolveFogDepthsPerStage } from './fogDepths'
@@ -67,8 +67,36 @@ function StageFog({ config, rig }: { config: Scene01Config; rig: CouplingRig }) 
   return <fog attach="fog" args={[config.environment.backgroundColor, initial.near, initial.far]} />
 }
 
-function CameraRig({ spec, rig }: { spec: FramedCameraSpec; rig: CouplingRig }) {
-  useFramedCamera(spec, () => rig.camera.stage)
+/**
+ * Drives the camera along its framing sequence by `rig.camera.stage`. Framings with a `follow` weight track the
+ * combination's centre: the camera receives its ground-plane displacement from the coupled rest position, derived
+ * from the same per-frame pose the vehicles use, so it is as deterministic (and reversible) as the scroll.
+ */
+function CameraRig({
+  spec,
+  rig,
+  pose,
+  lengths,
+  rest,
+}: {
+  spec: FramedCameraSpec
+  rig: CouplingRig
+  pose: CouplingPose
+  lengths: CombinationLengths
+  rest: readonly [number, number]
+}) {
+  const centre = useRef<[number, number]>([0, 0])
+  const delta = useRef<[number, number]>([0, 0])
+  useFramedCamera(
+    spec,
+    () => rig.camera.stage,
+    () => {
+      combinationCentre(pose, lengths, centre.current)
+      delta.current[0] = centre.current[0] - rest[0]
+      delta.current[1] = centre.current[1] - rest[1]
+      return delta.current
+    },
+  )
   return null
 }
 
@@ -104,10 +132,28 @@ export function CouplingStage({ rig, pose, layout, config = SCENE_01_CONFIG }: C
   const access = useMemo(() => {
     const hw = config.environment.highway
     const trailer = getModelEntry(config.models.trailer)
-    const rearX = layout.trailerFinal[0] + (trailer.footprint.length / 2) * config.models.scale + hw.access.rearMargin
+    const behindTrailer = layout.trailerFinal[0] + (trailer.footprint.length / 2) * config.models.scale + hw.access.rearMargin
+    const rearX = hw.access.runToRoadEnd ? Math.max(behindTrailer, hw.length / 2) : behindTrailer
     const joinZ = hw.centreZ - (hw.lanes * hw.laneWidth) / 2
     return describeAccessRoad(layout.pullerFinal, config.departure, hw.access.width, rearX, joinZ, hw.access.overlap)
   }, [config, layout])
+
+  // Camera follow: the combination's centre while coupled at rest is the reference the wide framing tracks from.
+  const lengths = useMemo<CombinationLengths>(
+    () => ({
+      pullerLength: getModelEntry(config.models.puller).footprint.length * config.models.scale,
+      trailerLength: getModelEntry(config.models.trailer).footprint.length * config.models.scale,
+    }),
+    [config],
+  )
+  const rest = useMemo<readonly [number, number]>(() => {
+    const atRest = createPose(layout)
+    atRest.puller.x = layout.pullerFinal[0]
+    atRest.puller.z = layout.pullerFinal[2]
+    atRest.trailer.x = layout.trailerFinal[0]
+    atRest.trailer.z = layout.trailerFinal[2]
+    return combinationCentre(atRest, lengths, [0, 0])
+  }, [layout, lengths])
 
   return (
     <>
@@ -133,7 +179,7 @@ export function CouplingStage({ rig, pose, layout, config = SCENE_01_CONFIG }: C
         <Highway config={config.environment.highway} groundY={config.world.groundY} getOpacity={() => rig.highway.opacity} access={access} />
       )}
       <PoseResolver rig={rig} pose={pose} layout={layout} config={config} />
-      <CameraRig spec={config.camera} rig={rig} />
+      <CameraRig spec={config.camera} rig={rig} pose={pose} lengths={lengths} rest={rest} />
       <PullerTruck pose={pose} layout={layout} config={config} />
       <HydraulicAxleTrailer pose={pose} layout={layout} config={config} />
     </>
