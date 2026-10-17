@@ -52,7 +52,8 @@ Edit the model's `normalisation` block in `src/three/assets/modelManifest.ts`:
 In `src/scenes/scene-01-coupling/config.ts`:
 
 - [ ] `assembly.couplingPoint.x` shifts the whole combination left/right.
-- [ ] `assembly.pullerApproachDistance` controls how far the puller reverses during Phase D.
+- [ ] `phases.approach` sets how much of the pinned scroll the simultaneous travel occupies;
+      `easing.approach` shapes it (both vehicles share it so they arrive together).
 - [ ] `positions.pullerStart` / `positions.trailerStart` set where the vehicles appear from;
       keep them outside the visible width for the base framing.
 - [ ] `camera.base.fitWidth` / `camera.heroHold.fitWidth` tighten or loosen the framing.
@@ -64,7 +65,7 @@ In `src/scenes/scene-01-coupling/config.ts`:
 
 - [ ] `npm run build` passes (`tsc -b` + Vite).
 - [ ] Scroll forward and backward through the whole section on desktop and on a phone-sized
-      viewport: entrance from the left, entrance from the right, approach, hold.
+      viewport: both vehicles travel together from left and right, meet, then hold.
 - [ ] Enable "reduce motion" in the OS and reload: the finished combination is shown statically
       with the copy visible.
 - [ ] Temporarily rename one `.glb` to confirm the placeholder fallback still works — the site must

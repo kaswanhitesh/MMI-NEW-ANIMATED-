@@ -34,7 +34,7 @@ export function PullerTruck({ rig, layout, config = SCENE_01_CONFIG }: PullerTru
 
   // Layout positions are exposed on the group for inspection in three.js devtools; the live position comes from the rig.
   const userData = useMemo(
-    () => ({ vehicle: 'puller', modelId: id, start: layout.pullerStart, staged: layout.pullerStaged, final: layout.pullerFinal }),
+    () => ({ vehicle: 'puller', modelId: id, start: layout.pullerStart, final: layout.pullerFinal }),
     [id, layout],
   )
 

@@ -49,7 +49,7 @@ export function createInitialRig(layout: AssemblyLayout): CouplingRig {
   }
 }
 
-/** Rig in its completed (Phase E) state — used for reduced-motion rendering and tests. */
+/** Rig in its completed (hero hold) state — used for reduced-motion rendering and tests. */
 export function createFinalRig(layout: AssemblyLayout): CouplingRig {
   return {
     puller: pos(layout.pullerFinal),

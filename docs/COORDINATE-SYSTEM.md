@@ -10,13 +10,15 @@ Everything in the 3D scenes is expressed in **metres** in a right-handed, **Y-up
 
 ## Scene 01 choreography in these terms
 
-- The **puller truck** starts off-screen at −X (left) and moves towards +X. Because its nose points
-  to −X, this is the puller *reversing* towards the trailer, which is how a puller is actually coupled.
-- The **hydraulic axle trailer** starts off-screen at +X (right) and moves towards −X with its front
-  connection (gooseneck) leading.
-- Both meet at `assembly.couplingPoint`. The puller's `anchors.coupling` and the trailer's
-  `anchors.coupling` (model manifest) are brought to that world point, so the final positions are
-  *derived*: `final = couplingPoint − anchor` (plus half of `connectedGap` on each side).
+- The **puller truck** starts outside the frame at −X (left) and travels towards +X. Its nose points
+  to −X, so it travels coupling-first, the way a puller is presented to a trailer.
+- The **hydraulic axle trailer** starts outside the frame at +X (right) and travels towards −X with
+  its front connection (gooseneck) leading.
+- Both travel during the single `approach` phase, over the same timeline window with the same ease,
+  so they move simultaneously and arrive together at `assembly.couplingPoint`. The puller's
+  `anchors.coupling` and the trailer's `anchors.coupling` (model manifest) are brought to that world
+  point, so the final positions are *derived*: `final = couplingPoint − anchor` (plus half of
+  `connectedGap` on each side). Nothing moves after the arrival.
 
 ## Model local space (after normalisation)
 
@@ -49,11 +51,10 @@ this order: scale → rotation → automatic bounding-box fit → manual `offset
 `SCENE_01_CONFIG.camera` describes the view as a **target** plus a **direction** from the target
 towards the camera and a **fit width / fit height** in metres. The actual distance is derived at
 runtime for the viewport's aspect ratio, so phones (portrait) and ultra-wides both keep the whole
-combination in frame. `base` is used for Phases A–D and `heroHold` is blended in during Phase E.
+combination in frame. `base` is used while the vehicles approach and `heroHold` is blended in during the hero hold.
 
 ## Scroll → timeline
 
 The pinned section maps scroll position to timeline progress 0–1 (`scroll.distanceVh` viewport
 heights of scrolling). Phase windows in `SCENE_01_CONFIG.phases` are fractions of that progress and
-become GSAP labels of the same name (`initial`, `pullerEntrance`, `trailerEntrance`, `connection`,
-`heroHold`, plus `end`).
+become GSAP labels of the same name (`initial`, `approach`, `heroHold`, plus `end`).

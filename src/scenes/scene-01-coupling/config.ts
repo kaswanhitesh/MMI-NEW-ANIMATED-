@@ -23,7 +23,7 @@ import type { FramedCameraSpec } from '../../three/camera/types'
 import type { RenderingConfig } from '../../three/canvas/types'
 import type { StageLightingConfig, YardEnvironmentConfig } from '../../three/environment/types'
 
-export type Scene01PhaseName = 'initial' | 'pullerEntrance' | 'trailerEntrance' | 'connection' | 'heroHold'
+export type Scene01PhaseName = 'initial' | 'approach' | 'heroHold'
 
 export interface PhaseWindow {
   /** Timeline progress (0–1) where the phase starts. */
@@ -49,10 +49,6 @@ export interface Scene01Config {
     couplingPoint: Vec3
     /** Longitudinal clearance (m) left between the two anchors in the connected state. 0 = anchors coincide. */
     connectedGap: number
-    /** Distance (m) the puller is staged short of its final position before Phase D; it covers this during the final approach. */
-    pullerApproachDistance: number
-    /** Same for the trailer. 0 = trailer is already parked when Phase D begins. */
-    trailerApproachDistance: number
     /** Warn in development when the anchors' heights differ by more than this (m) — a hint that model normalisation is off. */
     anchorHeightTolerance: number
   }
@@ -68,7 +64,7 @@ export interface Scene01Config {
   }
   /**
    * Camera: `target` ≈ centre of the completed combination; `base` frames Phases A–D;
-   * `heroHold` is blended in during Phase E (a subtle push-in, never a cut).
+   * `heroHold` is blended in during the hero hold (a subtle push-in, never a cut).
    */
   camera: FramedCameraSpec
   /** Stage lighting. Light positions are ABSOLUTE world positions in metres, not relative to the vehicles. */
@@ -84,17 +80,19 @@ export interface Scene01Config {
     /** Development aid: draw ScrollTrigger start/end markers. */
     markers: boolean
   }
-  /** Timeline phase windows as fractions of the total pinned scroll. Must be contiguous, ascending, and end at 1. */
+  /**
+   * Timeline phase windows as fractions of the total pinned scroll. Must be contiguous, ascending, and end at 1.
+   * Both vehicles move during `approach` only, simultaneously, from their start positions to their connected positions.
+   */
   phases: Readonly<Record<Scene01PhaseName, PhaseWindow>>
   easing: {
-    pullerEntrance: string
-    trailerEntrance: string
-    connection: string
+    /** Shared ease for both vehicles' travel — identical so they move and arrive together. */
+    approach: string
     heroDolly: string
     overlay: string
   }
   overlay: {
-    /** Fraction of the pullerEntrance phase over which the hero copy fades out. */
+    /** Fraction of the approach phase over which the hero copy fades out. */
     heroFadeOutPortion: number
     /** Fraction of the heroHold phase over which the closing caption fades in. */
     captionFadeInPortion: number
@@ -120,8 +118,6 @@ export const SCENE_01_CONFIG: Scene01Config = {
   assembly: {
     couplingPoint: [-4.0, 1.3, 0],
     connectedGap: 0,
-    pullerApproachDistance: 1.1,
-    trailerApproachDistance: 0,
     anchorHeightTolerance: 0.3,
   },
 
@@ -188,23 +184,22 @@ export const SCENE_01_CONFIG: Scene01Config = {
   },
 
   phases: {
+    /** Phase A — opening composition: both vehicles wait outside the frame. */
     initial: { start: 0, end: 0.06 },
-    pullerEntrance: { start: 0.06, end: 0.4 },
-    trailerEntrance: { start: 0.4, end: 0.7 },
-    connection: { start: 0.7, end: 0.84 },
-    heroHold: { start: 0.84, end: 1 },
+    /** Phase B — both vehicles travel towards the coupling point over the SAME window and arrive together. */
+    approach: { start: 0.06, end: 0.78 },
+    /** Phase C — hero hold: nothing moves except a subtle camera push-in and the caption reveal. */
+    heroHold: { start: 0.78, end: 1 },
   },
 
   easing: {
-    pullerEntrance: 'power2.inOut',
-    trailerEntrance: 'power2.inOut',
-    connection: 'power1.inOut',
+    approach: 'power2.inOut',
     heroDolly: 'power1.inOut',
     overlay: 'power1.out',
   },
 
   overlay: {
-    heroFadeOutPortion: 0.45,
+    heroFadeOutPortion: 0.3,
     captionFadeInPortion: 0.5,
   },
 
@@ -222,10 +217,4 @@ export const SCENE_01_CONFIG: Scene01Config = {
 }
 
 /** Ordered list of phase names, used to build timeline labels in a stable order. */
-export const SCENE_01_PHASE_ORDER: readonly Scene01PhaseName[] = [
-  'initial',
-  'pullerEntrance',
-  'trailerEntrance',
-  'connection',
-  'heroHold',
-]
+export const SCENE_01_PHASE_ORDER: readonly Scene01PhaseName[] = ['initial', 'approach', 'heroHold']

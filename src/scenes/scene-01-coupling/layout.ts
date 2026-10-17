@@ -1,5 +1,5 @@
 /**
- * Resolves the concrete assembly layout (start / staged / final positions) for
+ * Resolves the concrete assembly layout (start and connected positions) for
  * Scene 01 from the central configuration and the model manifest.
  *
  * Pure functions — no React, no three.js — so they can be unit-tested and
@@ -11,14 +11,13 @@ import { SCENE_01_CONFIG, SCENE_01_PHASE_ORDER, type Scene01Config } from './con
 
 export interface AssemblyLayout {
   couplingPoint: Vec3
-  /** Phase A position. */
+  /** Opening position (outside the frame at −X). */
   pullerStart: Vec3
-  /** Position reached at the end of Phase B (short of final by `pullerApproachDistance`). */
-  pullerStaged: Vec3
-  /** Connected position (end of Phase D). */
+  /** Connected position, reached at the end of the approach phase. */
   pullerFinal: Vec3
+  /** Opening position (outside the frame at +X). */
   trailerStart: Vec3
-  trailerStaged: Vec3
+  /** Connected position, reached at the end of the approach phase together with the puller. */
   trailerFinal: Vec3
 }
 
@@ -54,18 +53,11 @@ export function resolveAssemblyLayout(config: Scene01Config = SCENE_01_CONFIG, m
   const trailerFinal =
     positions.trailerFinal ?? deriveFinalPosition(trailer, assembly.couplingPoint, models.scale, world.groundY, 1, assembly.connectedGap)
 
-  // The puller reverses towards +X during the final approach, so it is staged at −X of its final position.
-  const pullerStaged: Vec3 = [pullerFinal[0] - assembly.pullerApproachDistance, pullerFinal[1], pullerFinal[2]]
-  // The trailer travels towards −X, so it is staged at +X of its final position.
-  const trailerStaged: Vec3 = [trailerFinal[0] + assembly.trailerApproachDistance, trailerFinal[1], trailerFinal[2]]
-
   return {
     couplingPoint: assembly.couplingPoint,
     pullerStart: [positions.pullerStart[0], world.groundY, positions.pullerStart[2]],
-    pullerStaged,
     pullerFinal,
     trailerStart: [positions.trailerStart[0], world.groundY, positions.trailerStart[2]],
-    trailerStaged,
     trailerFinal,
   }
 }
@@ -111,8 +103,8 @@ export function validateScene01Config(config: Scene01Config = SCENE_01_CONFIG, m
   if (Math.abs(cursor - 1) > 1e-9) warnings.push(`Phases must end at 1 (last phase ends at ${cursor}).`)
 
   // 4. Entrances must actually travel in the documented directions.
-  if (layout.pullerStart[0] >= layout.pullerStaged[0]) warnings.push('pullerStart must be at −X of the puller staged position (it enters from the left).')
-  if (layout.trailerStart[0] <= layout.trailerStaged[0]) warnings.push('trailerStart must be at +X of the trailer staged position (it enters from the right).')
+  if (layout.pullerStart[0] >= layout.pullerFinal[0]) warnings.push('pullerStart must be at −X of the puller final position (it enters from the left).')
+  if (layout.trailerStart[0] <= layout.trailerFinal[0]) warnings.push('trailerStart must be at +X of the trailer final position (it enters from the right).')
 
   return warnings
 }

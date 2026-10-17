@@ -11,8 +11,10 @@
  *
  * Timeline time == scroll progress: the total duration is pinned to exactly 1,
  * phase windows from the config are placed at absolute positions and exposed as
- * labels (`initial`, `pullerEntrance`, `trailerEntrance`, `connection`,
- * `heroHold`, `end`). All tuning numbers come from the scene config.
+ * labels (`initial`, `approach`, `heroHold`, `end`). Both vehicles travel
+ * during `approach` on the same window with the same ease, so they move
+ * simultaneously and reach their connected positions together; nothing moves
+ * afterwards. All tuning numbers come from the scene config.
  */
 import { invalidate } from '@react-three/fiber'
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
@@ -118,9 +120,7 @@ function detectInitialMode(): CouplingTimelineMode {
  */
 function populateTimeline(tl: gsap.core.Timeline, rig: CouplingRig, layout: AssemblyLayout, config: Scene01Config): void {
   const { phases, easing, overlay } = config
-  const B = phases.pullerEntrance
-  const C = phases.trailerEntrance
-  const D = phases.connection
+  const A = phases.approach
   const E = phases.heroHold
 
   // Mirrors progress onto the rig and pins the total duration to 1 (timeline time == scroll progress).
@@ -128,22 +128,16 @@ function populateTimeline(tl: gsap.core.Timeline, rig: CouplingRig, layout: Asse
   for (const name of SCENE_01_PHASE_ORDER) tl.addLabel(name, phases[name].start)
   tl.addLabel('end', 1)
 
-  // Phase A (initial): nothing moves — the hold at the start is implicit.
+  // Initial phase: nothing moves — the hold at the start is implicit.
 
-  // Phase B: the puller enters from −X and stops short of its final position; the hero copy fades out early in the phase.
-  tl.to(rig.puller, { x: layout.pullerStaged[0], duration: len(B), ease: easing.pullerEntrance }, B.start)
-  tl.to(rig.overlay, { heroOpacity: 0, duration: len(B) * overlay.heroFadeOutPortion, ease: easing.overlay }, B.start)
+  // Approach: the puller (from −X) and the trailer (from +X) travel over the SAME window with the SAME ease,
+  // straight to their connected positions, so they move together and arrive together. No staging, no second move.
+  tl.to(rig.puller, { x: layout.pullerFinal[0], duration: len(A), ease: easing.approach }, A.start)
+  tl.to(rig.trailer, { x: layout.trailerFinal[0], duration: len(A), ease: easing.approach }, A.start)
+  // The hero copy fades out early in the approach.
+  tl.to(rig.overlay, { heroOpacity: 0, duration: len(A) * overlay.heroFadeOutPortion, ease: easing.overlay }, A.start)
 
-  // Phase C: the trailer enters from +X and parks at its staged position.
-  tl.to(rig.trailer, { x: layout.trailerStaged[0], duration: len(C), ease: easing.trailerEntrance }, C.start)
-
-  // Phase D: the final approach — the puller reverses onto the coupling; the trailer closes its own gap if it has one.
-  tl.to(rig.puller, { x: layout.pullerFinal[0], duration: len(D), ease: easing.connection }, D.start)
-  if (layout.trailerStaged[0] !== layout.trailerFinal[0]) {
-    tl.to(rig.trailer, { x: layout.trailerFinal[0], duration: len(D), ease: easing.connection }, D.start)
-  }
-
-  // Phase E: subtle camera push-in, then the closing caption fades in.
+  // Hero hold: both vehicles stay put; a subtle camera push-in, then the closing caption fades in.
   tl.to(rig.camera, { heroBlend: 1, duration: len(E) * HERO_DOLLY_PORTION, ease: easing.heroDolly }, E.start)
   tl.to(
     rig.overlay,

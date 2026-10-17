@@ -58,6 +58,7 @@ scroll position
    │  ScrollTrigger (pin + scrub)
    ▼
 GSAP timeline (duration 1, labels per phase)       ← config.phases / easing
+   │  one `approach` window: puller and trailer tween to their connected positions together
    │  tweens plain numbers on the rig
    ▼
 CouplingRig { puller.x, trailer.x, camera.heroBlend, overlay.* }
@@ -75,7 +76,7 @@ round — cannot affect the animation.
 
 `src/scenes/scene-01-coupling/config.ts` holds every tunable: start positions, coupling point,
 approach distances, camera framing, lighting, environment, scroll distance and scrub smoothing,
-phase windows, easing, DPR limits. `layout.ts` turns that into concrete start / staged / final
+phase windows, easing, DPR limits. `layout.ts` turns that into concrete start / final
 positions and validates the config in development (anchors must meet at the coupling point,
 phases must be contiguous and end at 1, entrances must travel in the documented directions).
 

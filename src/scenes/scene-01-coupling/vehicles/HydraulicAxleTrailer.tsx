@@ -34,7 +34,7 @@ export function HydraulicAxleTrailer({ rig, layout, config = SCENE_01_CONFIG }: 
 
   // Layout positions are exposed on the group for inspection in three.js devtools; the live position comes from the rig.
   const userData = useMemo(
-    () => ({ vehicle: 'trailer', modelId: id, start: layout.trailerStart, staged: layout.trailerStaged, final: layout.trailerFinal }),
+    () => ({ vehicle: 'trailer', modelId: id, start: layout.trailerStart, final: layout.trailerFinal }),
     [id, layout],
   )
 
