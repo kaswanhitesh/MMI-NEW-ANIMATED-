@@ -15,7 +15,7 @@ import { SceneCaption } from '../../site/hero/SceneCaption'
 import type { SceneSectionProps } from '../types'
 import { SCENE_01_CONFIG, type Scene01PhaseName } from './config'
 import { resolveAssemblyLayout, validateScene01Config } from './layout'
-import { createInitialRig } from './rig'
+import { createInitialRig, createPose } from './rig'
 import { CouplingStage } from './stage/CouplingStage'
 import { useCouplingTimeline } from './useCouplingTimeline'
 
@@ -34,6 +34,7 @@ export function CouplingScene({ sceneId, index }: SceneSectionProps) {
 
   const layout = useMemo(() => resolveAssemblyLayout(config), [])
   const rig = useMemo(() => createInitialRig(layout), [layout])
+  const pose = useMemo(() => createPose(layout), [layout])
 
   useEffect(() => {
     if (!import.meta.env.DEV || configValidated) return
@@ -56,6 +57,7 @@ export function CouplingScene({ sceneId, index }: SceneSectionProps) {
     layout,
     config,
     onPhaseChange: setPhase,
+    pose,
   })
 
   return (
@@ -75,7 +77,7 @@ export function CouplingScene({ sceneId, index }: SceneSectionProps) {
           toneMappingExposure={config.lighting.toneMappingExposure}
           onReady={() => setReady(true)}
         >
-          <CouplingStage rig={rig} layout={layout} config={config} />
+          <CouplingStage rig={rig} pose={pose} layout={layout} config={config} />
         </SceneCanvas>
         <div className={`scene-section__loading${ready ? ' is-hidden' : ''}`} aria-hidden={ready}>
           Preparing scene…

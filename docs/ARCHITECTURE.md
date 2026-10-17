@@ -58,14 +58,23 @@ scroll position
    │  ScrollTrigger (pin + scrub)
    ▼
 GSAP timeline (duration 1, labels per phase)       ← config.phases / easing
-   │  one `approach` window: puller and trailer tween to their connected positions together;
-   │  from 40% of that window the fleet-garage backdrop's opacity tweens 0 → 1, reaching 1 as they arrive
+   │  initial → approach → couplingHold → establish → departure → highwayHold
+   │  approach: puller and trailer tween to their connected positions together; from 40% of it the
+   │            fleet garage fades 0 → 1, reaching 1 as they arrive
+   │  couplingHold / establish: camera stage 0 → 1 → 2 (push-in, then wide pull-out); caption in, then out
+   │  departure: ONE scalar, departure.distance 0 → path length; garage 1 → 0 and highway 0 → 1 together
+   │             over its first 35%; camera stage 2 → 3 as the combination settles on the highway
    │  tweens plain numbers on the rig
    ▼
-CouplingRig { puller.x, trailer.x, camera.heroBlend, overlay.* }
+CouplingRig { puller, trailer, departure.distance, camera.stage, garage, highway, overlay.* }
    │  read every frame (demand frameloop; the timeline calls invalidate())
    ▼
-R3F stage: vehicle groups copy rig positions; useFramedCamera blends base → heroHold;
+PoseResolver (departurePath.ts): rig → CouplingPose { puller, trailer: x, z, yaw }
+   │  before the departure the approach positions pass straight through; during it the puller rides the
+   │  path and the trailer's kingpin stays pinned to the fifth wheel while its rear tracks the path
+   ▼
+R3F stage: vehicle groups copy the pose; useFramedCamera walks base → heroHold → wide → highway;
+           fog follows the framing; garage / highway / yard markings read their opacities;
            overlay opacities are written to the DOM hero / caption elements
 ```
 
@@ -144,8 +153,19 @@ Engine-layer pieces (`SceneCanvas`, `useFramedCamera`, `StageLighting`, `YardFlo
   `rig.garage.opacity` into them (and into per-garage clones of the parked fleet's materials) every
   rendered frame, so the same scrubbed timeline fades it in and out. It casts no shadows, which would
   otherwise land at full strength before the building had appeared.
-- **Fog on portrait screens** — the responsive camera backs off far on phones; `stage/fogDepths.ts`
-  pushes the fog band out past the framed subject so the vehicles never fog out.
+- **Fog per framing** — the responsive camera backs off far on phones and in the wide framings;
+  `stage/fogDepths.ts` pushes the fog band out past the framed subject for every framing and the stage
+  blends the depths with the camera stage, so the vehicles never fog out.
+- **Departure** — `departurePath.ts` is pure: a straight, a 180° left turn of `departure.turnRadius`
+  and a straight onto the highway. The puller rides the path; the trailer is pinned at its kingpin to
+  the puller's fifth wheel (manifest anchors) and points from a rear reference point further back along
+  the path, the way a steered modular trailer tracks its tractor. One tweened distance drives both, so
+  scrolling up replays exactly the same poses in reverse.
+- **Highway and ground layers** — `src/three/environment/Highway.tsx` lays a two-way road with a
+  generated grain texture, markings, shoulders and verges, plus the paved access road the scene derives
+  from the departure path (`describeAccessRoad`), which breaks the far verge at the junction. Layers are
+  separated by height so nothing coplanar can z-fight: floor (pushed back with a polygon offset), yard
+  markings 4 mm, access road 7 mm, highway 8 mm, paint 12 mm, contact shadows 20 mm.
 - **Reduced motion** — `gsap.matchMedia` renders the completed combination statically with all copy
   visible; no pin, no scrub. CSS transitions are also disabled under the same media query.
 - **No WebGL** — `SceneCanvas` probes first and renders a same-size text fallback; a runtime

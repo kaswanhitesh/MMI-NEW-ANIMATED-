@@ -11,10 +11,11 @@
  *
  * Timeline time == scroll progress: the total duration is pinned to exactly 1,
  * phase windows from the config are placed at absolute positions and exposed as
- * labels (`initial`, `approach`, `heroHold`, `end`). Both vehicles travel
- * during `approach` on the same window with the same ease, so they move
- * simultaneously and reach their connected positions together; nothing moves
- * afterwards. All tuning numbers come from the scene config.
+ * labels (`initial`, `approach`, `couplingHold`, `establish`, `departure`,
+ * `highwayHold`, `end`). Both vehicles travel during `approach` on the same
+ * window with the same ease; after the coupling hold and the establishing
+ * pull-out, ONE scalar (`rig.departure.distance`) drives the U-turn and the
+ * garage → highway crossfade. All tuning numbers come from the scene config.
  */
 import { invalidate } from '@react-three/fiber'
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
@@ -23,7 +24,8 @@ import { createPinnedScrubTimeline, getPhaseAtProgress } from '../../animation/s
 import { FULL_MOTION_QUERY, REDUCED_MOTION_QUERY } from '../../animation/useReducedMotion'
 import { SCENE_01_CONFIG, SCENE_01_PHASE_ORDER, type PhaseWindow, type Scene01Config, type Scene01PhaseName } from './config'
 import type { AssemblyLayout } from './layout'
-import { assignRig, createFinalRig, createInitialRig, type CouplingRig } from './rig'
+import { createDeparturePath } from './departurePath'
+import { assignRig, createFinalRig, createInitialRig, type CouplingPose, type CouplingRig } from './rig'
 
 export interface CouplingTimelineRefs {
   /** The pinned `<section>`: the ScrollTrigger's trigger and pin target. */
@@ -43,6 +45,8 @@ export interface UseCouplingTimelineOptions {
   config?: Scene01Config
   /** Fired when the active phase changes, and once with the starting phase right after the timeline is built. */
   onPhaseChange?: (phase: Scene01PhaseName) => void
+  /** Derived vehicle transforms, exposed on the development debug handle only. */
+  pose?: CouplingPose
 }
 
 export type CouplingTimelineMode = 'scrub' | 'static'
@@ -62,6 +66,7 @@ export interface CouplingPhaseLabel {
 export interface Scene01DebugHandle {
   rig: CouplingRig
   layout: AssemblyLayout
+  pose?: CouplingPose
   /** The scrubbed timeline, or null in static mode. */
   timeline: gsap.core.Timeline | null
   /** The timeline's ScrollTrigger, or undefined in static mode. */
@@ -119,9 +124,12 @@ function detectInitialMode(): CouplingTimelineMode {
  * timeline times; with contiguous phases ending at 1 the result lasts exactly 1.
  */
 function populateTimeline(tl: gsap.core.Timeline, rig: CouplingRig, layout: AssemblyLayout, config: Scene01Config): void {
-  const { phases, easing, overlay } = config
+  const { phases, easing, overlay, departure } = config
   const A = phases.approach
-  const E = phases.heroHold
+  const CH = phases.couplingHold
+  const ES = phases.establish
+  const DP = phases.departure
+  const path = createDeparturePath(layout.pullerFinal, departure)
 
   // Mirrors progress onto the rig and pins the total duration to 1 (timeline time == scroll progress).
   tl.to(rig, { progress: 1, duration: 1, ease: 'none' }, 0)
@@ -145,13 +153,29 @@ function populateTimeline(tl: gsap.core.Timeline, rig: CouplingRig, layout: Asse
     tl.to(rig.garage, { opacity: 1, duration: Math.max(1e-4, A.end - fadeStart), ease: easing.garageFade }, fadeStart)
   }
 
-  // Hero hold: both vehicles stay put; a subtle camera push-in, then the closing caption fades in.
-  tl.to(rig.camera, { heroBlend: 1, duration: len(E) * HERO_DOLLY_PORTION, ease: easing.heroDolly }, E.start)
+  // Coupling hold: both vehicles stay put; a subtle camera push-in (stage 0 → 1), then the caption fades in.
+  tl.to(rig.camera, { stage: 1, duration: len(CH) * HERO_DOLLY_PORTION, ease: easing.heroDolly }, CH.start)
   tl.to(
     rig.overlay,
-    { captionOpacity: 1, duration: len(E) * overlay.captionFadeInPortion, ease: easing.overlay },
-    E.start + len(E) * CAPTION_DELAY_PORTION,
+    { captionOpacity: 1, duration: len(CH) * overlay.captionFadeInPortion, ease: easing.overlay },
+    CH.start + len(CH) * CAPTION_DELAY_PORTION,
   )
+
+  // Establishing shot: the camera pulls out to the wide framing (stage 1 → 2); the caption leaves with it.
+  tl.to(rig.camera, { stage: 2, duration: len(ES), ease: easing.establish }, ES.start)
+  tl.to(rig.overlay, { captionOpacity: 0, duration: len(ES) * overlay.captionFadeOutPortion, ease: easing.overlay }, ES.start)
+
+  // Departure: ONE scalar — distance along the path — drives both vehicles (see departurePath.ts), with a slow
+  // start and stop. The garage fades out and the highway fades in together at the start of the move, and the camera
+  // settles from the wide framing onto the right-aligned highway composition (stage 2 → 3) as the vehicle arrives.
+  tl.to(rig.departure, { distance: path.totalLength, duration: len(DP), ease: easing.departure }, DP.start)
+  const crossfade = Math.max(1e-4, len(DP) * departure.crossfadePortion)
+  if (garage.enabled) tl.to(rig.garage, { opacity: 0, duration: crossfade, ease: easing.crossfade }, DP.start)
+  if (config.environment.highway.enabled) tl.to(rig.highway, { opacity: 1, duration: crossfade, ease: easing.crossfade }, DP.start)
+  const settleStart = DP.start + len(DP) * departure.cameraSettleStart
+  tl.to(rig.camera, { stage: 3, duration: Math.max(1e-4, DP.end - settleStart), ease: easing.cameraSettle }, settleStart)
+
+  // Highway hold: nothing moves.
 }
 
 /**
@@ -160,7 +184,7 @@ function populateTimeline(tl: gsap.core.Timeline, rig: CouplingRig, layout: Asse
  * presentation mode so the section can reflect it (e.g. `data-mode`).
  */
 export function useCouplingTimeline(options: UseCouplingTimelineOptions): CouplingTimelineState {
-  const { rig, layout, config = SCENE_01_CONFIG, onPhaseChange } = options
+  const { rig, layout, config = SCENE_01_CONFIG, onPhaseChange, pose } = options
   const { section, hero, caption } = options.refs
 
   const [mode, setMode] = useState<CouplingTimelineMode>(detectInitialMode)
@@ -190,7 +214,11 @@ export function useCouplingTimeline(options: UseCouplingTimelineOptions): Coupli
     const mountStatic = (): (() => void) => {
       setMode('static')
       const showFinal = config.reducedMotion.showFinalState
-      const state = showFinal ? createFinalRig(layout) : createInitialRig(layout)
+      const finalState = {
+        cameraStage: config.camera.sequence.length - 1,
+        departureDistance: createDeparturePath(layout.pullerFinal, config.departure).totalLength,
+      }
+      const state = showFinal ? createFinalRig(layout, finalState) : createInitialRig(layout)
       // Reduced motion must never hide copy: both overlays are fully visible, and the rig mirrors that so diagnostics agree with the DOM.
       state.overlay.heroOpacity = 1
       state.overlay.captionOpacity = 1
@@ -198,8 +226,8 @@ export function useCouplingTimeline(options: UseCouplingTimelineOptions): Coupli
       applyOverlayOpacity(hero.current, rig.overlay.heroOpacity)
       applyOverlayOpacity(caption.current, rig.overlay.captionOpacity)
       invalidate()
-      notifyPhase(showFinal ? 'heroHold' : 'initial')
-      publishDebugHandle({ rig, layout, timeline: null, scrollTrigger: undefined, mode: 'static' })
+      notifyPhase(showFinal ? 'highwayHold' : 'initial')
+      publishDebugHandle({ rig, layout, pose, timeline: null, scrollTrigger: undefined, mode: 'static' })
       return cleanupPresentation
     }
 
@@ -256,7 +284,7 @@ export function useCouplingTimeline(options: UseCouplingTimelineOptions): Coupli
       if (import.meta.env.DEV && Math.abs(tl.duration() - 1) > 1e-6) {
         console.warn(`[scene-01] timeline duration is ${tl.duration()}, expected exactly 1 — check config.phases (see validateScene01Config).`)
       }
-      publishDebugHandle({ rig, layout, timeline: tl, scrollTrigger: tl.scrollTrigger, mode: 'scrub' })
+      publishDebugHandle({ rig, layout, pose, timeline: tl, scrollTrigger: tl.scrollTrigger, mode: 'scrub' })
       return cleanupPresentation
     }
 
@@ -287,7 +315,7 @@ export function useCouplingTimeline(options: UseCouplingTimelineOptions): Coupli
       cleanupFallback()
       mm.revert()
     }
-  }, [section, hero, caption, rig, layout, config])
+  }, [section, hero, caption, rig, layout, config, pose])
 
   return { mode }
 }

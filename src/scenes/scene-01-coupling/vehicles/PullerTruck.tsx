@@ -1,6 +1,6 @@
 /**
- * The puller truck in Scene 01. A group whose position is copied from
- * `rig.puller` every rendered frame (only when it changed), containing the
+ * The puller truck in Scene 01. A group whose position and yaw are copied from
+ * the derived `pose.puller` every rendered frame (only when changed), containing the
  * manifest model placed through `ModelAsset` with the TEMPORARY placeholder
  * geometry as its fallback. This file and HydraulicAxleTrailer.tsx are the
  * only places that know which model id a vehicle uses.
@@ -12,20 +12,22 @@ import { getModelEntry, ModelAsset } from '../../../three/assets'
 import { PlaceholderPullerTruck } from '../../../three/placeholders'
 import { SCENE_01_CONFIG, type Scene01Config } from '../config'
 import type { AssemblyLayout } from '../layout'
-import type { CouplingRig, RigPosition } from '../rig'
+import type { CouplingPose, VehiclePose } from '../rig'
 
 export interface PullerTruckProps {
-  rig: CouplingRig
+  /** Derived per-frame transform (position + yaw) the group copies; see departurePath.ts. */
+  pose: CouplingPose
   layout: AssemblyLayout
   config?: Scene01Config
 }
 
-function syncPosition(group: Group, target: RigPosition): void {
+function syncPose(group: Group, target: VehiclePose): void {
   const { position } = group
   if (position.x !== target.x || position.y !== target.y || position.z !== target.z) position.set(target.x, target.y, target.z)
+  if (group.rotation.y !== target.yaw) group.rotation.y = target.yaw
 }
 
-export function PullerTruck({ rig, layout, config = SCENE_01_CONFIG }: PullerTruckProps) {
+export function PullerTruck({ pose, layout, config = SCENE_01_CONFIG }: PullerTruckProps) {
   const ref = useRef<Group>(null)
   const invalidate = useThree((state) => state.invalidate)
   const id = config.models.puller
@@ -41,13 +43,13 @@ export function PullerTruck({ rig, layout, config = SCENE_01_CONFIG }: PullerTru
   useLayoutEffect(() => {
     const group = ref.current
     if (!group) return
-    syncPosition(group, rig.puller)
+    syncPose(group, pose.puller)
     invalidate()
-  }, [rig, invalidate])
+  }, [pose, invalidate])
 
   useFrame(() => {
     const group = ref.current
-    if (group) syncPosition(group, rig.puller)
+    if (group) syncPose(group, pose.puller)
   })
 
   return (

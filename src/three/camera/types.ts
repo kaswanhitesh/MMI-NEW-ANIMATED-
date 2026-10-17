@@ -1,7 +1,8 @@
 /**
- * Scene-agnostic camera framing description. A scene config provides one or
- * more of these; `useFramedCamera` derives the actual camera distance per
- * viewport aspect ratio so the composition survives phones and ultra-wides.
+ * Scene-agnostic camera framing description. A scene config provides a named
+ * set of framings and the order a single "stage" value walks through them;
+ * `useFramedCamera` derives the actual camera distance per viewport aspect
+ * ratio so the composition survives phones and ultra-wides.
  */
 import type { Vec3 } from '../assets/types'
 
@@ -14,19 +15,29 @@ export interface CameraFraming {
   fitHeight: number
   /** Offset added to the scene's camera target for this framing. */
   targetOffset: Vec3
+  /** Overrides the spec-wide `maxDistance` for this framing (e.g. a wide shot that may pull back further). */
+  maxDistance?: number
+  /**
+   * Overrides applied on portrait viewports (aspect < 1). Use it to centre a composition that is right-aligned
+   * on landscape screens, or to tighten / loosen the fit where the narrow width would otherwise dominate.
+   */
+  portrait?: Partial<Pick<CameraFraming, 'targetOffset' | 'fitWidth' | 'fitHeight' | 'maxDistance'>>
 }
 
-export interface FramedCameraSpec {
+export interface FramedCameraSpec<N extends string = string> {
   /** Vertical field of view in degrees. */
   fov: number
   near: number
   far: number
   /** Look-at target in world space. */
   target: Vec3
-  /** Framing used when `blend` = 0. */
-  base: CameraFraming
-  /** Framing used when `blend` = 1 (e.g. a hero push-in). */
-  heroHold: CameraFraming
+  /** Named framings. */
+  framings: Readonly<Record<N, CameraFraming>>
+  /**
+   * Order of the framings along the camera "stage" axis: stage 0 shows `sequence[0]`, stage 1 shows `sequence[1]`, and
+   * fractional stages interpolate position and target between neighbours. A scroll timeline tweens the stage.
+   */
+  sequence: readonly N[]
   /** Clamp on the derived camera distance (m). */
   minDistance: number
   maxDistance: number

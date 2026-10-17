@@ -8,7 +8,8 @@
 import { ContactShadows } from '@react-three/drei'
 import { useThree } from '@react-three/fiber'
 import { useLayoutEffect, useMemo, useRef } from 'react'
-import { Euler, Matrix4, Quaternion, Vector3, type InstancedMesh } from 'three'
+import { useFrame } from '@react-three/fiber'
+import { Euler, Matrix4, Quaternion, Vector3, type InstancedMesh, type MeshBasicMaterial } from 'three'
 import type { Vec3 } from '../assets/types'
 import type { YardEnvironmentConfig } from './types'
 
@@ -18,15 +19,16 @@ export interface YardFloorProps {
   groundY: number
   /** Centre of the contact-shadow plane (its y is ignored). Defaults to the origin. */
   shadowCentre?: Vec3
+  /** Read every frame; multiplies the lane markings' opacity (e.g. to fade the yard out). Defaults to 1. */
+  getMarkingsOpacity?: () => number
 }
 
 /** Across-lane width of one marking stripe (m). */
 const STRIPE_WIDTH = 0.12
 /** Markings float this far above the floor so they are not z-fought by it. */
 const MARKING_LIFT = 0.004
-/** Contact shadows sit just above the floor and below the markings. */
-const CONTACT_SHADOW_LIFT = 0.002
-const CONTACT_SHADOW_RESOLUTION = 512
+/** Contact shadows sit above every ground layer (markings 4 mm, road surfaces ≤ 12 mm) so shadows fall on all of them. */
+const CONTACT_SHADOW_LIFT = 0.02
 
 const ORIGIN: Vec3 = [0, 0, 0]
 
@@ -52,10 +54,31 @@ function computeStripeCentres(markings: YardEnvironmentConfig['markings'], y: nu
   return centres
 }
 
-function LaneMarkings({ markings, groundY }: { markings: YardEnvironmentConfig['markings']; groundY: number }) {
+function LaneMarkings({
+  markings,
+  groundY,
+  getOpacity,
+}: {
+  markings: YardEnvironmentConfig['markings']
+  groundY: number
+  getOpacity?: () => number
+}) {
   const ref = useRef<InstancedMesh>(null)
+  const materialRef = useRef<MeshBasicMaterial>(null)
+  const lastFactor = useRef(Number.NaN)
   const invalidate = useThree((state) => state.invalidate)
   const centres = useMemo(() => computeStripeCentres(markings, groundY + MARKING_LIFT), [markings, groundY])
+
+  // Demand frameloop: runs only when something invalidated; the markings follow the fade factor the scene provides.
+  useFrame(() => {
+    const material = materialRef.current
+    if (!material) return
+    const factor = getOpacity ? Math.min(1, Math.max(0, getOpacity())) : 1
+    if (factor === lastFactor.current) return
+    lastFactor.current = factor
+    material.opacity = markings.opacity * factor
+    if (ref.current) ref.current.visible = factor > 0.001
+  })
 
   useLayoutEffect(() => {
     const mesh = ref.current
@@ -77,6 +100,7 @@ function LaneMarkings({ markings, groundY }: { markings: YardEnvironmentConfig['
     <instancedMesh key={centres.length} ref={ref} name="yard-markings" args={[undefined, undefined, centres.length]}>
       <planeGeometry args={[markings.stripeLength, STRIPE_WIDTH]} />
       <meshBasicMaterial
+        ref={materialRef}
         color={markings.color}
         transparent
         opacity={markings.opacity}
@@ -90,7 +114,7 @@ function LaneMarkings({ markings, groundY }: { markings: YardEnvironmentConfig['
   )
 }
 
-export function YardFloor({ environment, groundY, shadowCentre = ORIGIN }: YardFloorProps) {
+export function YardFloor({ environment, groundY, shadowCentre = ORIGIN, getMarkingsOpacity }: YardFloorProps) {
   const { floor, markings, contactShadow } = environment
 
   return (
@@ -104,9 +128,12 @@ export function YardFloor({ environment, groundY, shadowCentre = ORIGIN }: YardF
           metalness={floor.metalness}
           envMapIntensity={floor.envMapIntensity}
           toneMapped={false}
+          polygonOffset
+          polygonOffsetFactor={1}
+          polygonOffsetUnits={1}
         />
       </mesh>
-      <LaneMarkings markings={markings} groundY={groundY} />
+      <LaneMarkings markings={markings} groundY={groundY} getOpacity={getMarkingsOpacity} />
       {/* scale={1}: drei multiplies width/height by `scale` (default 10); the config values are metres already. */}
       <ContactShadows
         scale={1}
@@ -116,7 +143,7 @@ export function YardFloor({ environment, groundY, shadowCentre = ORIGIN }: YardF
         width={contactShadow.width}
         height={contactShadow.height}
         far={contactShadow.far}
-        resolution={CONTACT_SHADOW_RESOLUTION}
+        resolution={contactShadow.resolution}
         frames={Infinity}
       />
     </group>

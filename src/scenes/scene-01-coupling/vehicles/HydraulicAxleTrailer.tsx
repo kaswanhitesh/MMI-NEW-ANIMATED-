@@ -12,20 +12,22 @@ import { getModelEntry, ModelAsset } from '../../../three/assets'
 import { PlaceholderHydraulicAxleTrailer } from '../../../three/placeholders'
 import { SCENE_01_CONFIG, type Scene01Config } from '../config'
 import type { AssemblyLayout } from '../layout'
-import type { CouplingRig, RigPosition } from '../rig'
+import type { CouplingPose, VehiclePose } from '../rig'
 
 export interface HydraulicAxleTrailerProps {
-  rig: CouplingRig
+  /** Derived per-frame transform (position + yaw) the group copies; see departurePath.ts. */
+  pose: CouplingPose
   layout: AssemblyLayout
   config?: Scene01Config
 }
 
-function syncPosition(group: Group, target: RigPosition): void {
+function syncPose(group: Group, target: VehiclePose): void {
   const { position } = group
   if (position.x !== target.x || position.y !== target.y || position.z !== target.z) position.set(target.x, target.y, target.z)
+  if (group.rotation.y !== target.yaw) group.rotation.y = target.yaw
 }
 
-export function HydraulicAxleTrailer({ rig, layout, config = SCENE_01_CONFIG }: HydraulicAxleTrailerProps) {
+export function HydraulicAxleTrailer({ pose, layout, config = SCENE_01_CONFIG }: HydraulicAxleTrailerProps) {
   const ref = useRef<Group>(null)
   const invalidate = useThree((state) => state.invalidate)
   const id = config.models.trailer
@@ -41,13 +43,13 @@ export function HydraulicAxleTrailer({ rig, layout, config = SCENE_01_CONFIG }: 
   useLayoutEffect(() => {
     const group = ref.current
     if (!group) return
-    syncPosition(group, rig.trailer)
+    syncPose(group, pose.trailer)
     invalidate()
-  }, [rig, invalidate])
+  }, [pose, invalidate])
 
   useFrame(() => {
     const group = ref.current
-    if (group) syncPosition(group, rig.trailer)
+    if (group) syncPose(group, pose.trailer)
   })
 
   return (

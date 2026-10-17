@@ -7,6 +7,13 @@
  * both directions; the stage then copies the numbers onto whichever Object3D is
  * currently mounted — placeholder or real GLB. Swapping a model therefore never
  * touches the timeline.
+ *
+ * Two layers: the RIG holds what the timeline tweens (positions during the
+ * approach, the departure distance, camera stage, fades); the POSE is derived
+ * from the rig every frame by `resolveCouplingPose` (departurePath.ts) and is
+ * what the vehicle groups actually copy — during the departure the puller
+ * follows the U-turn path and the trailer tracks it, so their world transforms
+ * are a function of one scalar, the distance travelled.
  */
 import type { Vec3 } from '../../three/assets/types'
 import type { AssemblyLayout } from './layout'
@@ -21,8 +28,11 @@ export interface CouplingRig {
   puller: RigPosition
   trailer: RigPosition
   camera: {
-    /** 0 = base framing, 1 = hero-hold framing. Blended by the stage. */
-    heroBlend: number
+    /**
+     * Position along the camera framing sequence (see config.camera.sequence):
+     * 0 = base, 1 = coupling push-in, 2 = wide establishing shot, 3 = highway. Fractions blend.
+     */
+    stage: number
   }
   overlay: {
     /** Opacity of the opening hero copy (DOM). */
@@ -31,37 +41,69 @@ export interface CouplingRig {
     captionOpacity: number
   }
   garage: {
-    /** Opacity of the fleet-garage backdrop: 0 while the vehicles enter, 1 once they are coupled. */
+    /** Opacity of the fleet-garage backdrop: 0 while the vehicles enter, 1 once they are coupled, back to 0 as they depart. */
     opacity: number
+  }
+  highway: {
+    /** Opacity of the highway: 0 in the yard, 1 once the combination has departed. */
+    opacity: number
+  }
+  departure: {
+    /** Distance (m) the puller has travelled along the departure path; 0 = still at its coupling position. */
+    distance: number
   }
   /** Overall timeline progress 0–1, mirrored for diagnostics / badges. */
   progress: number
+}
+
+/** World transform of one vehicle group: position in metres and yaw (rotation about Y, radians). */
+export interface VehiclePose {
+  x: number
+  y: number
+  z: number
+  yaw: number
+}
+
+/** Derived per-frame transforms the vehicle groups copy. */
+export interface CouplingPose {
+  puller: VehiclePose
+  trailer: VehiclePose
+}
+
+/** Values the completed (end-of-scene) rig needs that depend on the scene config. */
+export interface FinalRigState {
+  cameraStage: number
+  departureDistance: number
 }
 
 function pos(v: Vec3): RigPosition {
   return { x: v[0], y: v[1], z: v[2] }
 }
 
-/** Rig in its Phase A state. */
+/** Rig in its opening state. */
 export function createInitialRig(layout: AssemblyLayout): CouplingRig {
   return {
     puller: pos(layout.pullerStart),
     trailer: pos(layout.trailerStart),
-    camera: { heroBlend: 0 },
+    camera: { stage: 0 },
     overlay: { heroOpacity: 1, captionOpacity: 0 },
     garage: { opacity: 0 },
+    highway: { opacity: 0 },
+    departure: { distance: 0 },
     progress: 0,
   }
 }
 
-/** Rig in its completed (hero hold) state — used for reduced-motion rendering and tests. */
-export function createFinalRig(layout: AssemblyLayout): CouplingRig {
+/** Rig in its completed state (combination parked on the highway) — used for reduced-motion rendering and tests. */
+export function createFinalRig(layout: AssemblyLayout, final: FinalRigState): CouplingRig {
   return {
     puller: pos(layout.pullerFinal),
     trailer: pos(layout.trailerFinal),
-    camera: { heroBlend: 1 },
-    overlay: { heroOpacity: 0, captionOpacity: 1 },
-    garage: { opacity: 1 },
+    camera: { stage: final.cameraStage },
+    overlay: { heroOpacity: 0, captionOpacity: 0 },
+    garage: { opacity: 0 },
+    highway: { opacity: 1 },
+    departure: { distance: final.departureDistance },
     progress: 1,
   }
 }
@@ -70,9 +112,19 @@ export function createFinalRig(layout: AssemblyLayout): CouplingRig {
 export function assignRig(into: CouplingRig, from: CouplingRig): void {
   Object.assign(into.puller, from.puller)
   Object.assign(into.trailer, from.trailer)
-  into.camera.heroBlend = from.camera.heroBlend
+  into.camera.stage = from.camera.stage
   into.overlay.heroOpacity = from.overlay.heroOpacity
   into.overlay.captionOpacity = from.overlay.captionOpacity
   into.garage.opacity = from.garage.opacity
+  into.highway.opacity = from.highway.opacity
+  into.departure.distance = from.departure.distance
   into.progress = from.progress
+}
+
+/** Pose object at the opening positions; `resolveCouplingPose` keeps it current. */
+export function createPose(layout: AssemblyLayout): CouplingPose {
+  return {
+    puller: { x: layout.pullerStart[0], y: layout.pullerStart[1], z: layout.pullerStart[2], yaw: 0 },
+    trailer: { x: layout.trailerStart[0], y: layout.trailerStart[1], z: layout.trailerStart[2], yaw: 0 },
+  }
 }

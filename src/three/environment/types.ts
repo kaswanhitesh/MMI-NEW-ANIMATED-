@@ -44,9 +44,36 @@ export interface YardEnvironmentConfig {
   floor: { size: number; color: string; roughness: number; metalness: number; envMapIntensity: number }
   /** Subtle painted yard markings on the floor — restrained environmental detail. */
   markings: { color: string; opacity: number; laneHalfWidth: number; length: number; stripeLength: number; stripeGap: number }
-  contactShadow: { opacity: number; blur: number; width: number; height: number; far: number }
+  contactShadow: { opacity: number; blur: number; width: number; height: number; far: number; resolution: number }
   /** Procedural heavy-haul fleet garage behind the yard; its opacity is driven by the scene's animation rig. */
   garage: FleetGarageConfig
+  /** Highway the combination departs onto; its opacity is driven by the scene's animation rig. */
+  highway: HighwayConfig
+}
+
+/**
+ * A straight two-way highway running along X: asphalt carriageway with a
+ * procedural grain, dashed centre line, solid edge lines, shoulders and
+ * verges, plus a paved access road joining its far side. All dimensions in
+ * metres. Layers are separated by height (see Highway.tsx), all below the
+ * contact-shadow plane so vehicle shadows fall onto them.
+ */
+export interface HighwayConfig {
+  enabled: boolean
+  /** World Z of the road's centre line. */
+  centreZ: number
+  /** Length along X (fog hides the ends). */
+  length: number
+  lanes: number
+  laneWidth: number
+  shoulderWidth: number
+  vergeWidth: number
+  markings: { dashLength: number; dashGap: number; lineWidth: number; edgeLineInset: number }
+  colors: { asphalt: string; shoulder: string; verge: string; centreLine: string; edgeLine: string }
+  /** Strength of the procedural asphalt grain, 0 (flat colour) to 1. */
+  grain: number
+  /** Paved access road the scene lays under its departure path (the scene derives the outline). */
+  access: { width: number; rearMargin: number; overlap: number }
 }
 
 /** One stationary unit parked inside the garage. `x` is relative to the facade centre, `depth` is metres into the hall. */

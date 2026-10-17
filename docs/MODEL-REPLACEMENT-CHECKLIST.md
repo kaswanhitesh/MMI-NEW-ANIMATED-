@@ -56,7 +56,12 @@ In `src/scenes/scene-01-coupling/config.ts`:
       `easing.approach` shapes it (both vehicles share it so they arrive together).
 - [ ] `positions.pullerStart` / `positions.trailerStart` set where the vehicles appear from;
       keep them outside the visible width for the base framing.
-- [ ] `camera.base.fitWidth` / `camera.heroHold.fitWidth` tighten or loosen the framing.
+- [ ] `camera.framings.*.fitWidth` tighten or loosen each framing (`base`, `heroHold`, `wide`,
+      `highway`); `camera.framings.highway.targetOffset[0]` moves the final combination left/right.
+- [ ] `departure.turnRadius` / `straightOut` / `straightIn` shape the U-turn;
+      `departure.trailerTrackingLength` should be the distance from the trailer's kingpin back to the
+      centre of its axle group once the real trailer is in. Keep the coupling anchors accurate: the
+      departure pins the trailer's kingpin to the puller's fifth wheel through the turn.
 - [ ] `scroll.distanceVh` and `scroll.scrub` set how long and how smooth the scrub feels.
 - [ ] `lighting.*` and `environment.*` for the look. `lighting.key.shadowExtent` must cover the
       full combination.
@@ -65,7 +70,8 @@ In `src/scenes/scene-01-coupling/config.ts`:
 
 - [ ] `npm run build` passes (`tsc -b` + Vite).
 - [ ] Scroll forward and backward through the whole section on desktop and on a phone-sized
-      viewport: both vehicles travel together from left and right, meet, then hold.
+      viewport: both vehicles travel together from left and right, couple, the camera pulls out, the
+      combination U-turns onto the highway and holds on the right; scrolling up reverses all of it.
 - [ ] Enable "reduce motion" in the OS and reload: the finished combination is shown statically
       with the copy visible.
 - [ ] Temporarily rename one `.glb` to confirm the placeholder fallback still works — the site must

@@ -18,7 +18,18 @@ Everything in the 3D scenes is expressed in **metres** in a right-handed, **Y-up
   so they move simultaneously and arrive together at `assembly.couplingPoint`. The puller's
   `anchors.coupling` and the trailer's `anchors.coupling` (model manifest) are brought to that world
   point, so the final positions are *derived*: `final = couplingPoint − anchor` (plus half of
-  `connectedGap` on each side). Nothing moves after the arrival.
+  `connectedGap` on each side).
+- After the coupling hold and the wide establishing shot, the coupled combination **departs**: the
+  puller drives forward (−X) for `departure.straightOut`, makes a 180° **left** turn of radius
+  `departure.turnRadius` (towards +Z, i.e. towards the camera), then drives `departure.straightIn`
+  along +X onto the highway, where it ends in the far lane (left-hand traffic) facing +X.
+
+### Yaw convention during the departure
+
+Vehicles rotate about Y only. A yaw of θ turns the local forward (−X) to world `(−cos θ, 0, sin θ)`:
+θ = 0 faces −X (the assembly orientation), θ = π/2 faces +Z (towards the camera), θ = π faces +X.
+The trailer's kingpin (its `anchors.coupling`) is kept exactly on the puller's fifth wheel (the
+puller's `anchors.coupling`), so entering the real models' anchors keeps them coupled through the turn.
 
 ## Model local space (after normalisation)
 
@@ -51,10 +62,15 @@ this order: scale → rotation → automatic bounding-box fit → manual `offset
 `SCENE_01_CONFIG.camera` describes the view as a **target** plus a **direction** from the target
 towards the camera and a **fit width / fit height** in metres. The actual distance is derived at
 runtime for the viewport's aspect ratio, so phones (portrait) and ultra-wides both keep the whole
-combination in frame. `base` is used while the vehicles approach and `heroHold` is blended in during the hero hold.
+combination in frame. The named framings are walked in `camera.sequence` order by one tweened
+"stage" value: `base` (approach), `heroHold` (push-in while coupled), `wide` (establishing shot that
+holds the whole U-turn) and `highway` (final shot, combination on the right, left ~40% clear). A
+framing may set its own `maxDistance` and `portrait` overrides (target, fit, distance) for narrow
+screens, where the final shot centres the combination instead of right-aligning it.
 
 ## Scroll → timeline
 
 The pinned section maps scroll position to timeline progress 0–1 (`scroll.distanceVh` viewport
 heights of scrolling). Phase windows in `SCENE_01_CONFIG.phases` are fractions of that progress and
-become GSAP labels of the same name (`initial`, `approach`, `heroHold`, plus `end`).
+become GSAP labels of the same name (`initial`, `approach`, `couplingHold`, `establish`,
+`departure`, `highwayHold`, plus `end`).

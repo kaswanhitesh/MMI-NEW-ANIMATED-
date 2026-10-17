@@ -23,7 +23,10 @@ import type { FramedCameraSpec } from '../../three/camera/types'
 import type { RenderingConfig } from '../../three/canvas/types'
 import type { StageLightingConfig, YardEnvironmentConfig } from '../../three/environment/types'
 
-export type Scene01PhaseName = 'initial' | 'approach' | 'heroHold'
+export type Scene01PhaseName = 'initial' | 'approach' | 'couplingHold' | 'establish' | 'departure' | 'highwayHold'
+
+/** Named camera framings, in the order the camera stage walks through them. */
+export type Scene01CameraFraming = 'base' | 'heroHold' | 'wide' | 'highway'
 
 export interface PhaseWindow {
   /** Timeline progress (0–1) where the phase starts. */
@@ -63,10 +66,26 @@ export interface Scene01Config {
     trailerFinal: Vec3 | null
   }
   /**
-   * Camera: `target` ≈ centre of the completed combination; `base` frames Phases A–D;
-   * `heroHold` is blended in during the hero hold (a subtle push-in, never a cut).
+   * Camera: `target` ≈ centre of the coupled combination. Framings in sequence order: `base` (approach),
+   * `heroHold` (push-in while coupled), `wide` (establishing shot before departure), `highway` (final
+   * right-aligned composition). The timeline tweens `rig.camera.stage` through them; nothing cuts.
    */
-  camera: FramedCameraSpec
+  camera: FramedCameraSpec<Scene01CameraFraming>
+  /** The departure manoeuvre the coupled combination performs after the establishing shot. */
+  departure: {
+    /** Metres driven straight ahead (−X) before the U-turn begins. */
+    straightOut: number
+    /** Radius (m) of the puller's path through the 180° left turn. Larger = broader, more heavy-haul. */
+    turnRadius: number
+    /** Metres driven after the turn (now heading +X) to the final highway position. */
+    straightIn: number
+    /** Distance (m) from the trailer's kingpin back to its rear reference point (axle-group centre), used for tracking. */
+    trailerTrackingLength: number
+    /** Fraction of the departure phase over which the garage fades out and the highway fades in. */
+    crossfadePortion: number
+    /** Fraction of the departure phase at which the camera starts settling from `wide` to `highway`. */
+    cameraSettleStart: number
+  }
   /** Stage lighting. Light positions are ABSOLUTE world positions in metres, not relative to the vehicles. */
   lighting: StageLightingConfig
   /** Background/fog colour, yard floor, markings and contact shadow. */
@@ -91,13 +110,23 @@ export interface Scene01Config {
     heroDolly: string
     /** Ease of the garage fade-in during the second part of the approach. */
     garageFade: string
+    /** Ease of the camera pull-out to the establishing shot. */
+    establish: string
+    /** Ease of the departure travel (slow start, slow stop: heavy vehicle). */
+    departure: string
+    /** Ease of the garage → highway crossfade. */
+    crossfade: string
+    /** Ease of the final camera settle onto the highway composition. */
+    cameraSettle: string
     overlay: string
   }
   overlay: {
     /** Fraction of the approach phase over which the hero copy fades out. */
     heroFadeOutPortion: number
-    /** Fraction of the heroHold phase over which the closing caption fades in. */
+    /** Fraction of the couplingHold phase over which the closing caption fades in. */
     captionFadeInPortion: number
+    /** Fraction of the establish phase over which the caption fades out again (the highway shot carries no copy). */
+    captionFadeOutPortion: number
   }
   rendering: RenderingConfig
   reducedMotion: {
@@ -133,22 +162,44 @@ export const SCENE_01_CONFIG: Scene01Config = {
   camera: {
     fov: 30,
     near: 0.5,
-    far: 260,
+    far: 420,
     target: [0.5, 1.4, 0],
-    base: {
-      direction: [0.34, 0.27, 1],
-      fitWidth: 40,
-      fitHeight: 11,
-      targetOffset: [0, 0, 0],
+    framings: {
+      // Approach: both vehicles and the garage facade in frame.
+      base: { direction: [0.34, 0.27, 1], fitWidth: 40, fitHeight: 11, targetOffset: [0, 0, 0] },
+      // Coupling hold: a subtle push-in, never a cut.
+      heroHold: { direction: [0.3, 0.22, 1], fitWidth: 34, fitHeight: 10, targetOffset: [0, 0.2, 0] },
+      // Establishing shot: pulls out and re-centres over the turning area, leaving room on the left where the
+      // combination will swing round, so the whole U-turn stays in frame without moving the camera.
+      wide: {
+        direction: [0.34, 0.27, 1],
+        fitWidth: 62,
+        fitHeight: 22,
+        targetOffset: [-8, -0.2, 11],
+        portrait: { fitWidth: 46, maxDistance: 210, targetOffset: [-8.5, -0.2, 13] },
+      },
+      // Final: the combination parked on the highway on the RIGHT, the left ~40% of the frame kept clear.
+      // On portrait screens the combination is centred instead (it already fills most of the width there).
+      highway: {
+        direction: [0.3, 0.2, 1],
+        fitWidth: 56,
+        fitHeight: 16,
+        targetOffset: [5, -0.2, 29.9],
+        portrait: { fitWidth: 32, maxDistance: 210, targetOffset: [13, -0.2, 29.9] },
+      },
     },
-    heroHold: {
-      direction: [0.3, 0.22, 1],
-      fitWidth: 34,
-      fitHeight: 10,
-      targetOffset: [0, 0.2, 0],
-    },
+    sequence: ['base', 'heroHold', 'wide', 'highway'],
     minDistance: 20,
     maxDistance: 140,
+  },
+
+  departure: {
+    straightOut: 8,
+    turnRadius: 14,
+    straightIn: 38,
+    trailerTrackingLength: 10.55,
+    crossfadePortion: 0.35,
+    cameraSettleStart: 0.68,
   },
 
   lighting: {
@@ -159,7 +210,7 @@ export const SCENE_01_CONFIG: Scene01Config = {
       intensity: 2.6,
       castShadow: true,
       shadowMapSize: 2048,
-      shadowExtent: 26,
+      shadowExtent: 44,
       shadowBias: -0.0002,
       shadowNormalBias: 0.05,
       shadowRadius: 3,
@@ -175,7 +226,7 @@ export const SCENE_01_CONFIG: Scene01Config = {
     fog: { near: 48, far: 130 },
     floor: { size: 320, color: '#17191d', roughness: 0.94, metalness: 0.04, envMapIntensity: 0.35 },
     markings: { color: '#454b53', opacity: 0.6, laneHalfWidth: 2.4, length: 90, stripeLength: 2.4, stripeGap: 1.6 },
-    contactShadow: { opacity: 0.55, blur: 2.2, width: 80, height: 14, far: 3 },
+    contactShadow: { opacity: 0.55, blur: 2.2, width: 130, height: 72, far: 3, resolution: 1024 },
     // Cinematic backdrop: the MMI fleet garage. Invisible while the vehicles enter, fades in from 40% of the
     // approach and is fully visible the moment they couple. The facade stands 26 m behind the coupling line.
     garage: {
@@ -226,34 +277,63 @@ export const SCENE_01_CONFIG: Scene01Config = {
       },
       lightIntensity: { bay: 1.0, luminaire: 1.8 },
     },
+    // The highway the combination departs onto: a two-way road along X in the foreground. Its centre line is
+    // 1.9 m beyond the end of the departure path so the vehicle sits in the far (left-hand traffic) lane.
+    highway: {
+      enabled: true,
+      centreZ: 29.9,
+      length: 600,
+      lanes: 2,
+      laneWidth: 3.75,
+      shoulderWidth: 2,
+      vergeWidth: 2.5,
+      markings: { dashLength: 3, dashGap: 6, lineWidth: 0.15, edgeLineInset: 0.25 },
+      colors: { asphalt: '#2a2c2f', shoulder: '#3a3b3c', verge: '#33363a', centreLine: '#cfd2d4', edgeLine: '#c9ccce' },
+      grain: 0.6,
+      // Paved yard exit under the departure path: 10.5 m wide (covers the trailer's swept path including its tail
+      // swing, ~0.45 m beyond the path's outer offset at the end of the turn), starting 2 m behind
+      // the trailer's rear and tucking 5 cm under the carriageway at the junction.
+      access: { width: 10.5, rearMargin: 2, overlap: 0.05 },
+    },
   },
 
   scroll: {
-    distanceVh: 3.4,
+    distanceVh: 6.4,
     scrub: 0.9,
     anticipatePin: 1,
     markers: false,
   },
 
   phases: {
-    /** Phase A — opening composition: both vehicles wait outside the frame. */
-    initial: { start: 0, end: 0.06 },
-    /** Phase B — both vehicles travel towards the coupling point over the SAME window and arrive together. */
-    approach: { start: 0.06, end: 0.78 },
-    /** Phase C — hero hold: nothing moves except a subtle camera push-in and the caption reveal. */
-    heroHold: { start: 0.78, end: 1 },
+    /** Opening composition: both vehicles wait outside the frame. */
+    initial: { start: 0, end: 0.04 },
+    /** Both vehicles travel towards the coupling point over the SAME window and arrive together. */
+    approach: { start: 0.04, end: 0.4 },
+    /** Coupled: subtle camera push-in and the caption reveal; the garage stays visible. */
+    couplingHold: { start: 0.4, end: 0.48 },
+    /** Wide establishing shot: the camera pulls out; nothing moves yet; the caption fades out. */
+    establish: { start: 0.48, end: 0.57 },
+    /** The combination drives off, U-turns towards the camera and settles on the highway; garage → highway crossfade. */
+    departure: { start: 0.57, end: 0.92 },
+    /** Final hold on the highway composition. */
+    highwayHold: { start: 0.92, end: 1 },
   },
 
   easing: {
     approach: 'power2.inOut',
     heroDolly: 'power1.inOut',
     garageFade: 'power1.inOut',
+    establish: 'power1.inOut',
+    departure: 'power2.inOut',
+    crossfade: 'power1.inOut',
+    cameraSettle: 'power1.inOut',
     overlay: 'power1.out',
   },
 
   overlay: {
     heroFadeOutPortion: 0.3,
     captionFadeInPortion: 0.5,
+    captionFadeOutPortion: 0.8,
   },
 
   rendering: {
@@ -270,4 +350,4 @@ export const SCENE_01_CONFIG: Scene01Config = {
 }
 
 /** Ordered list of phase names, used to build timeline labels in a stable order. */
-export const SCENE_01_PHASE_ORDER: readonly Scene01PhaseName[] = ['initial', 'approach', 'heroHold']
+export const SCENE_01_PHASE_ORDER: readonly Scene01PhaseName[] = ['initial', 'approach', 'couplingHold', 'establish', 'departure', 'highwayHold']

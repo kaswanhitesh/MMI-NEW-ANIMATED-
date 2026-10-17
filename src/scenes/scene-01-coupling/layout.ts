@@ -106,7 +106,15 @@ export function validateScene01Config(config: Scene01Config = SCENE_01_CONFIG, m
   const fadePortion = config.environment.garage.fadeStartPortion
   if (!(fadePortion >= 0 && fadePortion < 1)) warnings.push(`environment.garage.fadeStartPortion must be in [0, 1) (got ${fadePortion}).`)
 
-  // 5. Entrances must actually travel in the documented directions.
+  // 5. Departure geometry and timing must be sane.
+  const dep = config.departure
+  if (!(dep.straightOut >= 0 && dep.turnRadius > 0 && dep.straightIn >= 0)) warnings.push('departure distances must be ≥ 0 and the turn radius > 0.')
+  if (!(dep.trailerTrackingLength > 0)) warnings.push('departure.trailerTrackingLength must be > 0.')
+  if (!(dep.crossfadePortion > 0 && dep.crossfadePortion <= 1)) warnings.push('departure.crossfadePortion must be in (0, 1].')
+  if (!(dep.cameraSettleStart >= 0 && dep.cameraSettleStart < 1)) warnings.push('departure.cameraSettleStart must be in [0, 1).')
+  if (config.camera.sequence.length < 2) warnings.push('camera.sequence must list at least two framings.')
+
+  // 6. Entrances must actually travel in the documented directions.
   if (layout.pullerStart[0] >= layout.pullerFinal[0]) warnings.push('pullerStart must be at −X of the puller final position (it enters from the left).')
   if (layout.trailerStart[0] <= layout.trailerFinal[0]) warnings.push('trailerStart must be at +X of the trailer final position (it enters from the right).')
 
