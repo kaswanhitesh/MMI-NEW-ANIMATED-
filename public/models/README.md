@@ -12,7 +12,18 @@ Until a file exists — or if it is not a valid GLB — the scene renders a clea
 **temporary placeholder** built from procedural geometry. The placeholder is a layout stand-in
 only; it is not a representation of any real vehicle.
 
-## Requirements for the delivered files
+Environment and equipment models (garage, exit road, highway, city, industrial area, factory,
+crane, cargo vessel, saddles, fabrication workpieces) are optional and go in
+`public/models/environment/`. They are NOT looked up automatically: each one is switched on by
+setting its slot's `model` in `src/scenes/scene-01-coupling/config.ts` (e.g.
+`environment.garage.slot.model`, `industry.crane.slot.model`), so no request is made for a file that
+does not exist yet. See `docs/MODEL-REPLACEMENT-CHECKLIST.md`, sections 7 and 8 (a crane model needs
+`bridge`, `trolley` and `hook` nodes to be animated).
+
+## Requirements for the delivered vehicle files
+
+(Environment and equipment models are different: they are not normalised, grounded or centred.
+Author them in their slot's local frame, in metres, Y up — see the checklist, sections 7 and 8.)
 
 - Format: binary glTF 2.0 (`.glb`), single file, textures embedded. Draco / meshopt compression is
   supported once a decoder is wired in `src/three/assets/ValidatedGLTFLoader.ts` (`configureModelLoader`).

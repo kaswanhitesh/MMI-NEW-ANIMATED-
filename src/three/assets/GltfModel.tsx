@@ -3,39 +3,43 @@
  * manifest normalisation (scale, rotation, bounding-box fit, manual offset) so
  * the model obeys the scene convention: metres, upright, nose to −X, origin at
  * the footprint centre on the ground. It must be rendered inside <Suspense>
- * and a ModelErrorBoundary (ModelAsset does both): a missing or invalid file
- * throws through useLoader.
+ * (ModelAsset does that). A missing or invalid file is an expected outcome:
+ * the loader resolves it as `unavailable` and this component renders the
+ * supplied TEMPORARY placeholder instead, reporting the reason through
+ * `onUnavailable`. Only unexpected exceptions throw to the error boundary.
  *
  * The loaded GLTF belongs to React Three Fiber's loader cache, which is why
- * unmounting does not dispose it. Call `releaseModel` when a scene is done
- * with a model, and `preloadModel` to warm the cache ahead of time.
+ * unmounting does not dispose it — see ./modelCache.ts.
  */
-import { useEffect, useMemo } from 'react'
 import { useLoader } from '@react-three/fiber'
-import type { Object3D } from 'three'
-import { disposeObject3D } from './dispose'
+import { useEffect, useMemo, type ReactNode } from 'react'
+import { registerLoadedScene } from './modelCache'
 import { computeNormalisationOffset, measureNormalisedBounds, prepareModelScene } from './normalise'
 import type { ModelManifestEntry } from './types'
-import { ValidatedGLTFLoader, configureModelLoader } from './ValidatedGLTFLoader'
-
-/** Scene roots handed out by the loader cache, keyed by model path, so `releaseModel` can dispose them. */
-const loadedScenes = new Map<string, Object3D>()
+import { ModelLoader, configureModelLoader, type ModelLoadError } from './ValidatedGLTFLoader'
 
 export interface GltfModelProps {
   entry: ModelManifestEntry
   /** Scene-level uniform scale multiplier (e.g. SCENE_01_CONFIG.models.scale). */
   sceneScale: number
-  /** Called after commit once the scene root is on screen (and again if a different callback is supplied). */
+  /** TEMPORARY placeholder geometry rendered when the GLB is unavailable. */
+  placeholder: ReactNode
+  /** Called after commit once the real model is on screen. */
   onLoaded?: () => void
+  /** Called after commit when the file could not be used and the placeholder is showing. */
+  onUnavailable?: (error: ModelLoadError) => void
 }
 
-export function GltfModel({ entry, sceneScale, onLoaded }: GltfModelProps) {
-  const gltf = useLoader(ValidatedGLTFLoader, entry.path, configureModelLoader)
+export function GltfModel({ entry, sceneScale, placeholder, onLoaded, onUnavailable }: GltfModelProps) {
+  const result = useLoader(ModelLoader, entry.path, configureModelLoader)
+  const gltf = result.status === 'loaded' ? result.gltf : null
+  const error = result.status === 'unavailable' ? result.error : null
   const { normalisation } = entry
 
-  const { scene, offset, rotation, scale } = useMemo(() => {
+  const prepared = useMemo(() => {
+    if (!gltf) return null
     const scene = gltf.scene
-    loadedScenes.set(entry.path, scene)
+    registerLoadedScene(entry.path, scene)
     prepareModelScene(scene)
     const bounds = measureNormalisedBounds(scene, normalisation, sceneScale)
     const offset = computeNormalisationOffset(bounds, normalisation)
@@ -44,41 +48,20 @@ export function GltfModel({ entry, sceneScale, onLoaded }: GltfModelProps) {
   }, [gltf, entry.path, normalisation, sceneScale])
 
   useEffect(() => {
-    onLoaded?.()
-  }, [scene, onLoaded])
+    if (prepared) onLoaded?.()
+  }, [prepared, onLoaded])
+
+  useEffect(() => {
+    if (error) onUnavailable?.(error)
+  }, [error, onUnavailable])
+
+  if (!prepared) return <>{placeholder}</>
 
   return (
-    <group position={offset}>
-      <group rotation={rotation} scale={scale}>
-        <primitive object={scene} />
+    <group position={prepared.offset}>
+      <group rotation={prepared.rotation} scale={prepared.scale}>
+        <primitive object={prepared.scene} />
       </group>
     </group>
   )
-}
-
-/**
- * Evicts a model from the loader cache and disposes its GPU resources if it
- * had been loaded. Safe to call for models that never loaded or already were
- * released. The next GltfModel for the same entry fetches the file again.
- */
-export function releaseModel(entry: ModelManifestEntry): void {
-  useLoader.clear(ValidatedGLTFLoader, entry.path)
-  const scene = loadedScenes.get(entry.path)
-  if (!scene) return
-  loadedScenes.delete(entry.path)
-  scene.removeFromParent()
-  disposeObject3D(scene)
-}
-
-/**
- * Starts fetching a model into the loader cache as a side effect. Never
- * throws: a missing file only surfaces later, as the placeholder, when a
- * GltfModel for the entry mounts.
- */
-export function preloadModel(entry: ModelManifestEntry): void {
-  try {
-    useLoader.preload(ValidatedGLTFLoader, entry.path, configureModelLoader)
-  } catch (error) {
-    if (import.meta.env.DEV) console.warn(`[assets] ${entry.label}: preload could not start.`, error)
-  }
 }

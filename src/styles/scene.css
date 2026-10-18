@@ -1,0 +1,302 @@
+/**
+ * Scene section contract — the CSS half of the pinned cinematic sections.
+ * Class names here are a contract with src/scenes/** (section markup),
+ * src/site/hero/** (overlay copy and badge) and src/three/canvas/** (the
+ * WebGL fallback). Keep the selectors flat and stable.
+ *
+ * Safe zones: the vehicles travel through the vertical middle band of the
+ * stage, so overlay copy is confined to the TOP-LEFT (hero) and BOTTOM-LEFT
+ * (caption) corners, each with a soft legibility scrim behind it — the only
+ * two decorative gradients on the site, no blur or glow. The status strip
+ * sits bottom-right. Nothing in the overlay takes pointer events except the
+ * placeholder badge, so scrolling passes straight through to the page.
+ */
+
+/* ---- The pinned section and its loading skeleton share one exact height so nothing shifts. ---- */
+.scene-section {
+  position: relative;
+  height: 100vh;
+  height: 100svh;
+  min-height: 560px;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  isolation: isolate;
+}
+
+.scene-skeleton {
+  height: 100vh;
+  height: 100svh;
+  min-height: 560px;
+  background: var(--bg);
+}
+
+/* ---- Stage (canvas or DOM fallback) ---- */
+.scene-section__stage {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.scene-section__stage canvas {
+  display: block;
+}
+
+/* Small label shown until the canvas has produced its first frame. */
+.scene-section__loading {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  pointer-events: none;
+  transition:
+    opacity var(--dur) var(--ease-out),
+    visibility 0s linear 0s;
+}
+
+.scene-section__loading.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--dur) var(--ease-out),
+    visibility 0s linear var(--dur);
+}
+
+/* ---- Overlay ---- */
+.scene-section__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  padding-top: calc(var(--header-h) + 24px);
+  padding-inline: var(--gutter);
+}
+
+/* Legibility scrims behind the two text zones. Left-weighted; they fade out towards the stage centre. */
+.scene-section__overlay::before,
+.scene-section__overlay::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  z-index: -1;
+  width: min(100%, 60rem);
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(90deg, #000 45%, transparent 100%);
+  mask-image: linear-gradient(90deg, #000 45%, transparent 100%);
+}
+
+.scene-section__overlay::before {
+  top: 0;
+  height: 42%;
+  background: linear-gradient(180deg, rgba(var(--bg-rgb), 0.82) 0%, rgba(var(--bg-rgb), 0.5) 45%, rgba(var(--bg-rgb), 0) 100%);
+}
+
+.scene-section__overlay::after {
+  bottom: 0;
+  height: 36%;
+  background: linear-gradient(0deg, rgba(var(--bg-rgb), 0.85) 0%, rgba(var(--bg-rgb), 0.5) 45%, rgba(var(--bg-rgb), 0) 100%);
+}
+
+/* Hero copy — top-left safe zone, in flow below the header padding. */
+.scene-overlay__hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 34rem;
+  will-change: opacity;
+}
+
+.scene-overlay__hero h1 {
+  font-size: var(--text-display);
+}
+
+.scene-overlay__hero .lede {
+  max-width: 30rem;
+}
+
+/* Closing caption — bottom-left safe zone. Hidden until the timeline reveals it with inline styles. */
+.scene-overlay__caption {
+  position: absolute;
+  left: var(--gutter);
+  bottom: 7vh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: min(30rem, 55%);
+  opacity: 0;
+  visibility: hidden;
+  will-change: opacity;
+}
+
+.scene-overlay__caption h2 {
+  font-size: var(--text-xl);
+}
+
+.scene-overlay__caption p {
+  font-size: var(--text-base);
+  color: var(--ink-soft);
+}
+
+/* Status strip — bottom-right: placeholder badge and, in development, the current phase name. */
+.scene-section__status {
+  position: absolute;
+  right: var(--gutter);
+  bottom: 7vh;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  max-width: 40%;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.scene-section__phase {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  opacity: 0.75;
+}
+
+/* ---- Placeholder badge — the one overlay element that may receive the pointer (for its title tooltip). ---- */
+.scene-badge {
+  pointer-events: auto;
+  padding: 6px 10px;
+  background: rgba(var(--surface-rgb), 0.88);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+}
+
+.scene-badge__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scene-badge__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.3;
+}
+
+.scene-badge__item::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--muted);
+  opacity: 0.6;
+}
+
+.scene-badge__item--placeholder::before {
+  background: var(--accent);
+  opacity: 1;
+}
+
+@media (min-width: 721px) {
+  .scene-badge__item {
+    white-space: nowrap;
+  }
+}
+
+/* ---- WebGL fallback — fills the stage with centred plain text; the section keeps its size. ---- */
+.scene-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: var(--space-3);
+  padding: calc(var(--header-h) + var(--space-6)) var(--gutter) var(--space-8);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: center;
+}
+
+.scene-fallback__title {
+  max-width: 28rem;
+  font-size: var(--text-xl);
+}
+
+.scene-fallback__reason {
+  max-width: 36rem;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.scene-fallback__description {
+  max-width: 36rem;
+  font-size: var(--text-sm);
+  color: var(--ink-soft);
+}
+
+/* ---- Mobile (≤ 720px): the overlay becomes a column — hero copy at the top, caption pushed to the bottom, status
+   strip below the caption — so nothing can overlap when both texts and the badge are visible at once. ---- */
+@media (max-width: 720px) {
+  .scene-section__overlay {
+    display: flex;
+    flex-direction: column;
+    padding-bottom: max(4vh, env(safe-area-inset-bottom));
+  }
+
+  .scene-section__overlay::before,
+  .scene-section__overlay::after {
+    width: 100%;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .scene-overlay__hero {
+    gap: var(--space-3);
+    max-width: 100%;
+  }
+
+  .scene-overlay__hero h1 {
+    font-size: var(--text-2xl);
+  }
+
+  .scene-overlay__hero .lede {
+    font-size: var(--text-base);
+    max-width: 100%;
+  }
+
+  .scene-overlay__caption {
+    position: static;
+    margin-top: auto;
+    max-width: 100%;
+  }
+
+  .scene-overlay__caption h2 {
+    font-size: var(--text-lg);
+  }
+
+  .scene-overlay__caption p {
+    font-size: var(--text-sm);
+  }
+
+  .scene-section__status {
+    position: static;
+    margin-top: var(--space-3);
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    max-width: none;
+  }
+
+  .scene-badge {
+    font-size: 11px;
+  }
+}

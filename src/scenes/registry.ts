@@ -13,7 +13,7 @@ export const SCENE_REGISTRY: readonly SceneDefinition[] = [
     id: 'scene-01-coupling',
     order: 1,
     title: 'Heavy-haul assembly',
-    summary: 'A puller truck reverses onto a hydraulic axle trailer to form a heavy-haul combination.',
+    summary: 'A puller truck and a hydraulic axle trailer close on each other and couple into a heavy-haul combination.',
     status: 'implemented',
     load: () => import('./scene-01-coupling'),
   },

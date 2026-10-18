@@ -3,8 +3,10 @@
  * It resolves the manifest entry, loads the GLB through GltfModel inside
  * Suspense + ModelErrorBoundary, keeps the model status store current and
  * shows the supplied TEMPORARY placeholder geometry while loading or whenever
- * the file is missing or invalid. A load failure never crashes the canvas; in
- * development it is reported once per model id with console.warn.
+ * the file is missing or invalid. A missing file is an expected state (the
+ * loader resolves it, nothing is thrown); the error boundary only guards
+ * against unexpected exceptions. Either way the canvas never crashes, and in
+ * development the substitution is reported once per model id with console.warn.
  */
 import { Suspense, useCallback, useEffect, useRef, type ReactNode } from 'react'
 import { GltfModel } from './GltfModel'
@@ -12,7 +14,7 @@ import { ModelErrorBoundary } from './ModelErrorBoundary'
 import { getModelEntry } from './modelManifest'
 import { setModelStatus } from './modelStatusStore'
 import type { ModelId } from './types'
-import { getModelLoadErrorMessage } from './ValidatedGLTFLoader'
+import { getModelLoadErrorMessage, type ModelLoadError } from './ValidatedGLTFLoader'
 
 /** Model ids already reported in this session, so a failure is logged once even across remounts. */
 const warnedModelIds = new Set<ModelId>()
@@ -38,9 +40,8 @@ export function ModelAsset({ id, sceneScale, placeholder }: ModelAssetProps) {
     setModelStatus({ id, source: 'gltf' })
   }, [id])
 
-  const handleError = useCallback(
-    (error: unknown) => {
-      const reason = getModelLoadErrorMessage(error)
+  const reportPlaceholder = useCallback(
+    (reason: string) => {
       settledFor.current = id
       setModelStatus({ id, source: 'placeholder', reason })
       if (import.meta.env.DEV && !warnedModelIds.has(id)) {
@@ -51,6 +52,12 @@ export function ModelAsset({ id, sceneScale, placeholder }: ModelAssetProps) {
     [id, entry.label],
   )
 
+  /** Expected outcome: the loader resolved the file as unavailable (missing, HTML fallback, not a GLB, unparseable). */
+  const handleUnavailable = useCallback((error: ModelLoadError) => reportPlaceholder(error.message), [reportPlaceholder])
+
+  /** Safety net: something unexpected threw while loading or preparing the model. */
+  const handleError = useCallback((error: unknown) => reportPlaceholder(getModelLoadErrorMessage(error)), [reportPlaceholder])
+
   useEffect(() => {
     if (settledFor.current !== id) setModelStatus({ id, source: 'loading' })
   }, [id])
@@ -58,7 +65,7 @@ export function ModelAsset({ id, sceneScale, placeholder }: ModelAssetProps) {
   return (
     <ModelErrorBoundary modelId={id} fallback={placeholder} onError={handleError}>
       <Suspense fallback={placeholder}>
-        <GltfModel entry={entry} sceneScale={sceneScale} onLoaded={handleLoaded} />
+        <GltfModel entry={entry} sceneScale={sceneScale} placeholder={placeholder} onLoaded={handleLoaded} onUnavailable={handleUnavailable} />
       </Suspense>
     </ModelErrorBoundary>
   )

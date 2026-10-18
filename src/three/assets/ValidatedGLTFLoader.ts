@@ -16,7 +16,7 @@
  * configuration (path, request headers, credentials) and the same
  * `resourcePath` resolution used for external .bin and texture references.
  */
-import { FileLoader, LoaderUtils } from 'three'
+import { FileLoader, Loader, LoaderUtils, type LoadingManager } from 'three'
 import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js'
 
 /** Failure categories reported by `ValidatedGLTFLoader`. */
@@ -199,11 +199,62 @@ export function getModelLoadErrorMessage(error: unknown): string {
   return singleLine(message) || 'Unknown model loading error.'
 }
 
+/** Outcome of loading a manifest model. A missing or invalid file is an EXPECTED state, not an exception. */
+export type ModelLoadResult =
+  | { readonly status: 'loaded'; readonly gltf: GLTF }
+  | { readonly status: 'unavailable'; readonly error: ModelLoadError }
+
+/**
+ * ModelLoader — the loader handed to React Three Fiber's `useLoader`.
+ *
+ * It wraps a `ValidatedGLTFLoader` and RESOLVES an `unavailable` result for
+ * every classified failure (missing file, HTML fallback page, not a GLB,
+ * unparseable) instead of rejecting. Why: React Three Fiber routes any error
+ * thrown inside the canvas — even one an error boundary catches — through
+ * `window.reportError`, so it surfaces as an uncaught error in the console and
+ * in error monitoring. A missing model is routine while the final assets are
+ * being produced and must not look like a crash. Only unexpected exceptions
+ * still reject and reach the error boundary around `ModelAsset`.
+ */
+export class ModelLoader extends Loader<ModelLoadResult> {
+  /** The underlying glTF loader; configure Draco / meshopt decoders on it (see `configureModelLoader`). */
+  readonly gltf: ValidatedGLTFLoader
+
+  constructor(manager?: LoadingManager) {
+    super(manager)
+    this.gltf = new ValidatedGLTFLoader(this.manager)
+  }
+
+  override load(
+    url: string,
+    onLoad: (result: ModelLoadResult) => void,
+    onProgress?: (event: ProgressEvent) => void,
+    onError?: (error: unknown) => void,
+  ): void {
+    const inner = this.gltf
+    inner.setPath(this.path)
+    inner.setResourcePath(this.resourcePath)
+    inner.setCrossOrigin(this.crossOrigin)
+    inner.setWithCredentials(this.withCredentials)
+    inner.setRequestHeader(this.requestHeader)
+    inner.load(
+      url,
+      (gltf) => onLoad({ status: 'loaded', gltf }),
+      onProgress,
+      (error) => {
+        if (error instanceof ModelLoadError) onLoad({ status: 'unavailable', error })
+        else if (onError) onError(error)
+        else console.error(error)
+      },
+    )
+  }
+}
+
 /**
  * Loader configuration hook, passed as the `extensions` argument of
- * `useLoader(ValidatedGLTFLoader, url, configureModelLoader)`. React Three
- * Fiber keeps ONE loader instance per constructor and invokes this before
- * EVERY load, so whatever is added here must be idempotent.
+ * `useLoader(ModelLoader, url, configureModelLoader)`. React Three Fiber keeps
+ * ONE loader instance per constructor and invokes this before EVERY load, so
+ * whatever is added here must be idempotent.
  *
  * Today it is intentionally a no-op: the manifest models are expected as
  * plain, uncompressed GLBs. When compressed deliveries arrive:
@@ -211,11 +262,11 @@ export function getModelLoadErrorMessage(error: unknown): string {
  *             create ONE module-level instance, point it at a copy of
  *             node_modules/three/examples/jsm/libs/draco/gltf/ served from
  *             `${import.meta.env.BASE_URL}draco/`, then
- *             `if (!loader.dracoLoader) loader.setDRACOLoader(draco)`.
+ *             `if (!loader.gltf.dracoLoader) loader.gltf.setDRACOLoader(draco)`.
  *  - Meshopt: `import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'`,
- *             then `if (!loader.meshoptDecoder) loader.setMeshoptDecoder(MeshoptDecoder)`.
+ *             then `if (!loader.gltf.meshoptDecoder) loader.gltf.setMeshoptDecoder(MeshoptDecoder)`.
  */
-export function configureModelLoader(loader: GLTFLoader): void {
+export function configureModelLoader(loader: ModelLoader): void {
   // Intentionally empty — see the comment above for enabling Draco / meshopt.
   void loader
 }

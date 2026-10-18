@@ -1,0 +1,85 @@
+/**
+ * Design tokens — the single place where colour, type, spacing and layout
+ * constants are defined. Every other stylesheet references these custom
+ * properties; components never hard-code values.
+ *
+ * Palette: dark graphite surfaces, warm neutral text and ONE muted amber
+ * accent used sparingly (eyebrow rules, the primary button, the "Live" pill,
+ * placeholder markers, focus rings). No glow, no decorative gradients.
+ *
+ * Type: system font stack with fluid sizes via clamp(). To add a licensed
+ * brand font later, declare @font-face here (self-hosted under public/fonts/)
+ * and point --font-sans at the family.
+ */
+:root {
+  color-scheme: dark;
+
+  /* ---- Colour ---- */
+  --bg: #0e1013;
+  --bg-rgb: 14, 16, 19;
+  --surface: #15181c;
+  --surface-rgb: 21, 24, 28;
+  --surface-raised: #1a1e23;
+  --ink: #e8ebef;
+  --ink-strong: #f6f7f9;
+  --ink-soft: #c5cbd2;
+  --muted: #9aa3ad;
+  --line: #262b31;
+  --line-strong: #343a41;
+  --accent: #c8893a;
+  --accent-hover: #d6984a;
+  --accent-ink: #0e1013;
+  --accent-soft: rgba(200, 137, 58, 0.45);
+
+  /* ---- Type ---- */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Liberation Sans', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --text-xs: clamp(0.72rem, 0.69rem + 0.15vw, 0.8rem);
+  --text-sm: clamp(0.84rem, 0.8rem + 0.2vw, 0.94rem);
+  --text-base: clamp(1rem, 0.96rem + 0.2vw, 1.1rem);
+  --text-lg: clamp(1.1rem, 1rem + 0.45vw, 1.35rem);
+  --text-xl: clamp(1.4rem, 1.2rem + 0.9vw, 1.9rem);
+  --text-2xl: clamp(1.8rem, 1.45rem + 1.7vw, 2.75rem);
+  --text-display: clamp(2rem, 1.4rem + 2.6vw, 3.6rem);
+  --leading-tight: 1.08;
+  --leading-snug: 1.25;
+  --leading-body: 1.6;
+  --tracking-tight: -0.015em;
+  --tracking-eyebrow: 0.14em;
+  --tracking-wordmark: 0.12em;
+
+  /* ---- Spacing ---- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --space-9: 6rem;
+  --space-10: 8rem;
+  /* Side gutter: never below 16px so 360px viewports keep breathing room. */
+  --gutter: clamp(1rem, 4vw, 2.5rem);
+  --content-max: 74rem;
+  --measure: 62ch;
+  --section-pad: clamp(4rem, 10vh, 7rem);
+
+  /* ---- Layout ---- */
+  --header-h: 64px;
+  --radius: 2px;
+  --radius-lg: 4px;
+  --z-header: 100;
+  --z-skip: 200;
+
+  /* ---- Motion ---- */
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --dur-fast: 150ms;
+  --dur: 240ms;
+}
+
+@media (max-width: 720px) {
+  :root {
+    --header-h: 56px;
+  }
+}
