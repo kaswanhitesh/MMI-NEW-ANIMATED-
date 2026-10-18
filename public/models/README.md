@@ -46,7 +46,9 @@ Author them in their slot's local frame, in metres, Y up — see the checklist, 
 
 **Puller truck** — the 6x4 ballast tractor modelled in `art/blender/mmi-tractor-detailed.blend`
 (collection `MMI_Tractor_Detailed`, scene `MMI_Puller_Detailed`). Export the collection with its root
-empty at the origin as glTF Binary (+Y up, modifiers applied, no cameras/lights), then compress with
+empty at the origin as glTF Binary (+Y up, modifiers applied, no cameras/lights; the cab's wheelhouses are
+a Boolean whose cutter, `cutter_wheelhouses_steps` in `MMI_Tractor_Cutters`, is parented to the root so it
+moves with it — do not export the cutter), then compress with
 `npx -y @gltf-transform/cli@4 optimize in.raw.glb public/models/puller-truck.glb --compress meshopt --instance false --join false --flatten false --palette false --simplify false --texture-compress webp --texture-size 1024`
 (`--instance false` keeps every wheel as its own named pivot node). It is a drawbar tractor: the rear hitch
 pivot is `mmi_tractor_coupling_jaw`, the front one `mmi_tractor_front_coupling`, the wheels
