@@ -37,7 +37,19 @@ Author them in their slot's local frame, in metres, Y up — see the checklist, 
 - Coupling anchors: update `anchors.coupling` in the manifest to the real model's fifth-wheel
   (puller) / gooseneck connection (trailer) position, measured **after** normalisation. The timeline
   derives the final assembly positions from these anchors, so nothing else needs editing.
-- Size budget: aim for ≤ 8 MB per model (compressed) and ≤ 300k triangles for the pair combined.
+- Size budget (on the wire, after compression): hero model 0.6–1.5 MB and 40–100k triangles at most;
+  Scene 01's models together ≤ 2.5 MB. The earlier 8 MB per model is far too heavy for mobile networks.
+  Current files: puller-truck.glb 64 KB / 13.8k triangles, hydraulic-axle-trailer.glb 46 KB / 35.9k.
+
+## Rebuilding the current vehicles
+
+Both GLBs are generated, not hand-modelled: `tools/blender/build_vehicles.py` builds them in Blender
+(GUI: run it from the Text Editor; headless: `blender --background --python tools/blender/build_vehicles.py -- <out> [Anton-Regular.ttf]`),
+then `scripts/optimize-models.sh <out>` applies meshopt compression and GPU instancing. The loader
+wires `MeshoptDecoder` in `configureModelLoader()`; meshopt is a required extension, so the files do
+not load without it. Moving parts are pivot nodes: `fifth_wheel` (puller, at the coupling point) and
+`gooseneck` (trailer, on the deck hinge). Wheels and bogies are GPU-instanced (one draw call per batch),
+so they are NOT individually named nodes in the GLB.
 
 See `docs/MODEL-REPLACEMENT-CHECKLIST.md` for the full hand-over checklist and
 `docs/COORDINATE-SYSTEM.md` for the scene conventions.

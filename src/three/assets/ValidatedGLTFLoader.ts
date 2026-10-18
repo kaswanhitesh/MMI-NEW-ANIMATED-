@@ -17,6 +17,7 @@
  * `resourcePath` resolution used for external .bin and texture references.
  */
 import { FileLoader, Loader, LoaderUtils, type LoadingManager } from 'three'
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js'
 
 /** Failure categories reported by `ValidatedGLTFLoader`. */
@@ -256,17 +257,21 @@ export class ModelLoader extends Loader<ModelLoadResult> {
  * ONE loader instance per constructor and invokes this before EVERY load, so
  * whatever is added here must be idempotent.
  *
- * Today it is intentionally a no-op: the manifest models are expected as
- * plain, uncompressed GLBs. When compressed deliveries arrive:
+ * Meshopt: the vehicle GLBs are compressed with `EXT_meshopt_compression`
+ * (scripts/optimize-models.sh), which is a REQUIRED extension — without the
+ * decoder they fail to parse and the placeholder is shown. The decoder is a
+ * small inline WASM module bundled with three; no file needs serving.
+ *
+ * Not wired yet, on purpose — add them when an asset actually needs them:
+ *  - KTX2 textures: the current models carry no textures. Wiring KTX2Loader
+ *    needs the renderer (`detectSupport(gl)`) and the Basis transcoder copied
+ *    from node_modules/three/examples/jsm/libs/basis/ to public/basis/.
  *  - Draco:   `import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js'`,
- *             create ONE module-level instance, point it at a copy of
+ *             one module-level instance pointed at a copy of
  *             node_modules/three/examples/jsm/libs/draco/gltf/ served from
  *             `${import.meta.env.BASE_URL}draco/`, then
  *             `if (!loader.gltf.dracoLoader) loader.gltf.setDRACOLoader(draco)`.
- *  - Meshopt: `import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'`,
- *             then `if (!loader.gltf.meshoptDecoder) loader.gltf.setMeshoptDecoder(MeshoptDecoder)`.
  */
 export function configureModelLoader(loader: ModelLoader): void {
-  // Intentionally empty — see the comment above for enabling Draco / meshopt.
-  void loader
+  if (!loader.gltf.meshoptDecoder) loader.gltf.setMeshoptDecoder(MeshoptDecoder)
 }

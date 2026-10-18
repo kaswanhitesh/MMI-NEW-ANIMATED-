@@ -25,8 +25,8 @@ export const MODEL_MANIFEST: Readonly<Record<ModelId, ModelManifestEntry>> = {
     id: 'puller-truck',
     label: 'Puller truck',
     path: `${MODEL_BASE_PATH}puller-truck.glb`,
-    // Nominal envelope for placeholder sizing only — not a real vehicle specification.
-    footprint: { length: 9.5, width: 2.9, height: 3.9 },
+    // Measured from public/models/puller-truck.glb (width includes the mirrors). Also sizes the placeholder.
+    footprint: { length: 9.58, width: 3.16, height: 3.9 },
     normalisation: {
       scale: 1,
       rotation: [0, 0, 0],
@@ -35,16 +35,17 @@ export const MODEL_MANIFEST: Readonly<Record<ModelId, ModelManifestEntry>> = {
       centreFootprint: true,
     },
     anchors: {
-      // Fifth-wheel / coupling plate, measured from the footprint centre. +X = rear of the puller.
-      coupling: [4.0, 1.3, 0],
+      // Fifth-wheel plate top centre, after normalisation (the GLB's bbox centre is x +0.03, so 4.0 → 3.97).
+      // Matches the `fifth_wheel` pivot node in the GLB. +X = rear of the puller.
+      coupling: [3.97, 1.3, 0],
     },
   },
   'hydraulic-axle-trailer': {
     id: 'hydraulic-axle-trailer',
     label: 'Hydraulic axle trailer',
     path: `${MODEL_BASE_PATH}hydraulic-axle-trailer.glb`,
-    // Nominal envelope for placeholder sizing only — not a real trailer specification.
-    footprint: { length: 18, width: 3.0, height: 1.9 },
+    // Measured from public/models/hydraulic-axle-trailer.glb. Deck top 1.2 = loading.cargo.trailerDeckTop.
+    footprint: { length: 18.06, width: 3.08, height: 1.85 },
     normalisation: {
       scale: 1,
       rotation: [0, 0, 0],
@@ -53,7 +54,8 @@ export const MODEL_MANIFEST: Readonly<Record<ModelId, ModelManifestEntry>> = {
       centreFootprint: true,
     },
     anchors: {
-      // Front connection point on the gooseneck, measured from the footprint centre. −X = front of the trailer.
+      // Kingpin pad underside on the gooseneck, after normalisation. Axle group centre is x 2.25, so
+      // kingpin → axles = 10.55 = departure.trailerTrackingLength. −X = front of the trailer.
       coupling: [-8.3, 1.3, 0],
     },
   },
