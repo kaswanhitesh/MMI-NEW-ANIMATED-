@@ -39,9 +39,12 @@ Author them in their slot's local frame, in metres, Y up — see the checklist, 
   derives the final assembly positions from these anchors, so nothing else needs editing.
 - Size budget (on the wire, after compression): hero model 0.6–1.5 MB and 40–100k triangles at most;
   Scene 01's models together ≤ 2.5 MB. The earlier 8 MB per model is far too heavy for mobile networks.
-  Current files: puller-truck.glb 964 KB / 179k triangles and hydraulic-axle-trailer.glb 249 KB / 148k (both over
-  the triangle guideline: the detailed cab front and the 48 trailer tyres; wheel meshes are shared, so the file sizes
-  stay small).
+  Current files: puller-truck.glb 959 KB / 111k triangles / 42 draw calls and hydraulic-axle-trailer.glb 199 KB /
+  29k unique triangles (100k drawn with the 24 instanced wheel pairs) / 19 draw calls. Both are produced by
+  `scripts/slim-vehicle-glb.mjs`, which is what keeps Scene 01 smooth: it strips the clearcoat/specular material
+  extensions (so three.js uses MeshStandardMaterial), joins every static part per material into one draw call, decimates
+  the wheel/hose/box meshes and GPU-instances meshes used three or more times. Without it the same models cost
+  331 draw calls per pass and 32 MeshPhysicalMaterials.
 
 ## Rebuilding the current vehicles
 
@@ -49,11 +52,13 @@ Author them in their slot's local frame, in metres, Y up — see the checklist, 
 (collection `MMI_Tractor_Detailed`, scene `MMI_Puller_Detailed`). Export the collection with its root
 empty at the origin as glTF Binary (+Y up, modifiers applied, no cameras/lights; the cab's wheelhouses are
 a Boolean whose cutter, `cutter_wheelhouses_steps` in `MMI_Tractor_Cutters`, is parented to the root so it
-moves with it — do not export the cutter), then compress with
-`npx -y @gltf-transform/cli@4 optimize in.raw.glb public/models/puller-truck.glb --compress meshopt --instance false --join false --flatten false --palette false --simplify false --texture-compress webp --texture-size 1024`
-(`--instance false` keeps every wheel as its own named pivot node). It is a drawbar tractor: the rear hitch
-pivot is `mmi_tractor_coupling_jaw`, the front one `mmi_tractor_front_coupling`, the wheels
-`mmi_tractor_wheel_{front,drive1,drive2}_{L,R}` (pivot empties at the hubs). It carries one texture, the
+moves with it — do not export the cutter), then run
+`node scripts/slim-vehicle-glb.mjs in.raw.glb public/models/puller-truck.glb`.
+It is a drawbar tractor: the rear hitch pivot is `mmi_tractor_coupling_jaw`, the front one
+`mmi_tractor_front_coupling` (both kept as named nodes with their geometry); the wheels are two instanced
+batches, `mmi_tractor_wheel_front_x3` and `mmi_tractor_wheel_twin_x4` (per-wheel pivots exist only in the
+.blend — pass `--keep` a wider regex and accept the extra draw calls if a wheel must be animated on its own).
+Everything else is merged per material under `MMI_Tractor_Detailed_static`. It carries one texture, the
 MEGA MOVE logo decal on the ballast body (WebP, `EXT_texture_webp`).
 
 **Hydraulic axle trailer** — a drawbar modular platform (two identical 6-line modules, 1.5 m axle pitch, 3.0 m
@@ -61,10 +66,12 @@ wide, deck top 1.2 m, pendulum axles with twin 17.5" wheels, 2.78 m A-frame towb
 the same `.blend`, scene `MMI_Trailer_Modular`, collection `MMI_Trailer_Modular`. Export it headlessly from the
 saved file (the live exporter picks up the active scene's selection):
 `blender --background art/blender/mmi-tractor-detailed.blend --python tools/blender/export_trailer.py -- out.raw.glb`,
-then the same gltf-transform command as the puller (no texture flags needed). Named parts: `trailer_towbar`
-(pivot on the headboard; the towing eye is 2.78 m ahead of it), `trailer_module_1/2`, `trailer_pendulum_NN_{L,R}`
-and `trailer_wheel_NN_{L,R}` (twin pair per side, pivot at the hub) for lines 01–12. It couples to the puller's
-rear hitch pin, so there is no gooseneck or fifth wheel any more.
+then `node scripts/slim-vehicle-glb.mjs out.raw.glb public/models/hydraulic-axle-trailer.glb`. Named parts in the
+GLB: `trailer_towbar` (pivot on the headboard; the towing eye is 2.78 m ahead of it) and the instanced batches
+`trailer_wheel_twin_x24` / `trailer_pendulum_arm_x24`; the deck modules, end plates, lamps, lettering and the
+rear power pack (`tools/blender/add_trailer_power_pack.py`) are merged per material under
+`MMI_Trailer_Modular_static`. The .blend keeps every line as `trailer_pendulum_NN_{L,R}` / `trailer_wheel_NN_{L,R}`.
+It couples to the puller's rear hitch pin, so there is no gooseneck or fifth wheel any more.
 
 The earlier generated gooseneck trailer is still reproducible from `tools/blender/build_vehicles.py` and
 `scripts/optimize-models.sh`.
