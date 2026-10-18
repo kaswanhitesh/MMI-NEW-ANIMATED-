@@ -25,8 +25,9 @@ export const MODEL_MANIFEST: Readonly<Record<ModelId, ModelManifestEntry>> = {
     id: 'puller-truck',
     label: 'Puller truck',
     path: `${MODEL_BASE_PATH}puller-truck.glb`,
-    // Measured from public/models/puller-truck.glb (width includes the mirrors). Also sizes the placeholder.
-    footprint: { length: 9.58, width: 3.16, height: 3.9 },
+    // Measured from public/models/puller-truck.glb — the 6x4 ballast tractor built in art/blender/mmi-tractor-detailed.blend
+    // (length nose to rear hitch; width over the mirrors; height to the roof deflector). Also sizes the placeholder.
+    footprint: { length: 7.72, width: 3.36, height: 3.96 },
     normalisation: {
       scale: 1,
       rotation: [0, 0, 0],
@@ -35,9 +36,16 @@ export const MODEL_MANIFEST: Readonly<Record<ModelId, ModelManifestEntry>> = {
       centreFootprint: true,
     },
     anchors: {
-      // Fifth-wheel plate top centre, after normalisation (the GLB's bbox centre is x +0.03, so 4.0 → 3.97).
-      // Matches the `fifth_wheel` pivot node in the GLB. +X = rear of the puller.
-      coupling: [3.97, 1.3, 0],
+      // This tractor is a drawbar puller (Rockinger-type 50 mm hitch, no fifth wheel), while the trailer couples by a
+      // gooseneck whose nose reaches 0.73 m ahead of its kingpin at 1.3 m height. Putting the kingpin on the hitch pin
+      // would drive the gooseneck through the rear platform, so the coupling anchor is a virtual point 0.06 m behind the
+      // tractor's rearmost part (x 3.86 after normalisation): the gooseneck nose then sits just behind and above the
+      // hitch. Height 1.3 matches the trailer anchor. All values after normalisation (the GLB's bbox centre is x +0.21).
+      coupling: [4.65, 1.3, 0],
+      // Rear drawbar hitch pin (the `mmi_tractor_coupling_jaw` pivot node): use it for a drawbar trailer.
+      drawbarPin: [3.74, 0.8, 0],
+      // Front hitch pin (the `mmi_tractor_front_coupling` pivot node).
+      frontHitchPin: [-3.74, 0.5, 0],
     },
   },
   'hydraulic-axle-trailer': {
