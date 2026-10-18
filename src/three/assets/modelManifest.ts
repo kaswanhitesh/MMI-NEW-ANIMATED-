@@ -50,7 +50,8 @@ export const MODEL_MANIFEST: Readonly<Record<ModelId, ModelManifestEntry>> = {
     // Measured from public/models/hydraulic-axle-trailer.glb — two 6-line modular platform modules (1.5 m axle pitch,
     // 3.0 m wide, deck top 1.2 = loading.cargo.trailerDeckTop) with a 2.78 m A-frame towbar; length is eye to tail.
     // Built in art/blender/mmi-tractor-detailed.blend, scene MMI_Trailer_Modular.
-    footprint: { length: 21.58, width: 3.07, height: 1.21 },
+    // Length is eye to the rear power pack; height to the power pack's breather pipe.
+    footprint: { length: 22.43, width: 3.04, height: 1.47 },
     normalisation: {
       scale: 1,
       rotation: [0, 0, 0],
@@ -60,9 +61,10 @@ export const MODEL_MANIFEST: Readonly<Record<ModelId, ModelManifestEntry>> = {
     },
     anchors: {
       // Towing eye centre at the tip of the A-frame towbar (`trailer_towbar` is the towbar's pivot node on the headboard),
-      // after normalisation. The 12-line axle group's centre is x 1.37, so eye → axles = 12.08 =
+      // after normalisation (the GLB's bbox centre is x +0.43 because the power pack hangs behind the end plate). The
+      // deck and 12-line axle group are centred on x 0.94 (= loading.cargo.deckOffset), so eye → axles = 12.08 =
       // departure.trailerTrackingLength. −X = front of the trailer.
-      coupling: [-10.71, 0.8, 0],
+      coupling: [-11.14, 0.8, 0],
     },
   },
 }

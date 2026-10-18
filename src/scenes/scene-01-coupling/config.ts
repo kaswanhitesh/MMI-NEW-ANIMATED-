@@ -555,7 +555,8 @@ export const SCENE_01_CONFIG: Scene01Config = {
     // Vessel middle over the deck centre (1.75 m behind the trailer centre); it rests on ground saddles 7 m to the
     // trailer's left (towards bay A's far wall), is lifted until it clears every saddle horn by 0.4 m, carried sideways
     // and set down. Its heights follow from the saddles (industry.supports) and the trailer's deck.
-    cargo: { deckOffset: 1.75, restLateral: 7, liftClearance: 0.4, trailerDeckTop: 1.2 },
+    // deckOffset 0.94 = the modular trailer's deck centre in its normalised frame (see the trailer's manifest entry).
+    cargo: { deckOffset: 0.94, restLateral: 7, liftClearance: 0.4, trailerDeckTop: 1.2 },
     crane: { parkZ: -96, parkTrolleyX: 451, parkHookY: 17, maxHookY: 17.8, approachClearance: 1.5, clearZ: -62 },
     rigging: { slingLength: 3.2, topSlingRise: 5.5, slack: 0.45 },
     timing: { riggingAttachPortion: 0.6, approachTravelEnd: 0.72, approachLowerStart: 0.45, attachContact: 0.62, releaseDetach: 0.35, releaseRiseStart: 0.42, releaseTravelStart: 0.62 },

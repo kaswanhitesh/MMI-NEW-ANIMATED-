@@ -39,7 +39,7 @@ Author them in their slot's local frame, in metres, Y up — see the checklist, 
   derives the final assembly positions from these anchors, so nothing else needs editing.
 - Size budget (on the wire, after compression): hero model 0.6–1.5 MB and 40–100k triangles at most;
   Scene 01's models together ≤ 2.5 MB. The earlier 8 MB per model is far too heavy for mobile networks.
-  Current files: puller-truck.glb 964 KB / 179k triangles and hydraulic-axle-trailer.glb 176 KB / 137k (both over
+  Current files: puller-truck.glb 964 KB / 179k triangles and hydraulic-axle-trailer.glb 249 KB / 148k (both over
   the triangle guideline: the detailed cab front and the 48 trailer tyres; wheel meshes are shared, so the file sizes
   stay small).
 
