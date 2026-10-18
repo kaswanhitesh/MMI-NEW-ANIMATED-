@@ -525,7 +525,8 @@ export const SCENE_01_CONFIG: Scene01Config = {
     straightOut: 8,
     turnRadius: 14,
     straightIn: 38,
-    trailerTrackingLength: 10.55,
+    // Towing eye to the centre of the 12-line axle group (see the trailer's manifest entry).
+    trailerTrackingLength: 12.08,
     revealStart: 0.3,
     cameraSettleStart: 0.5,
   },
